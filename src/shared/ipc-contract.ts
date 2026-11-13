@@ -14,6 +14,9 @@ import { Settings, SettingsPatch } from './settings-schema'
 import { ACTIONS, type Action } from './actions'
 import { MAX_SOURCES } from './limits'
 import type { FolderAddResult, FolderList, FoundComputer } from './folder-types'
+import {
+  APP_VPN_CHOICES, VPN_LABEL_MAX, VPN_LOCATION_ID, type AppLaunchResult, type VpnImportStage, type VpnStatus,
+} from './vpn-types'
 
 export const CALL_CHANNEL = 'mediaos:call'
 export const EVENT_CHANNEL = 'mediaos:event'
@@ -53,6 +56,13 @@ const Octet = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)'
 const Ipv4 = z.string().min(7).max(15).regex(new RegExp(`^${Octet}(?:\\.${Octet}){3}$`), 'IPv4 address')
 // eslint-disable-next-line no-control-regex -- Folder credentials must refuse control characters before IPC.
 const folderString = (max: number) => z.string().max(max).refine((s) => !/[\x00-\x1f\x7f]/.test(s))
+const LocationId = z.string().length(12).regex(VPN_LOCATION_ID)
+// A location's name: trimmed, 1-24 characters, no control characters.
+// eslint-disable-next-line no-control-regex -- VPN location names must refuse control characters before IPC.
+const VpnLabel = z.string().max(200).refine((s) => !/[\x00-\x1f\x7f]/.test(s)).transform((s) => s.trim())
+  .pipe(z.string().min(1).max(VPN_LABEL_MAX))
+/** An import entry id made by main ('e' and up to 4 digits), or 'any' for "Pick one for me". */
+const ImportEntry = z.string().regex(/^(?:any|e\d{1,4})$/)
 const loginFields = {
   server: folderString(253).transform((s) => s.trim().replace(/^(?:\\\\|\/\/)/, '').replace(/\.$/, '').toLowerCase())
     .pipe(z.string().min(1).max(253).regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,62}(?:\.[A-Za-z0-9][A-Za-z0-9_-]{0,62})*$/)),
@@ -143,6 +153,20 @@ export const CALLS = {
   'apps.launch': z.tuple([Id]),
   'apps.close': z.tuple([]),
   'apps.resetProfile': z.tuple([Id]),
+
+  // VPN (docs/design/vpn.md). Locations, keys and tunnel details stay in main; the renderer sees VpnStatus only.
+  'vpn.status': z.tuple([]),
+  'vpn.setEnabled': z.tuple([z.boolean()]),
+  'vpn.setLocation': z.tuple([LocationId]),
+  'vpn.removeLocation': z.tuple([LocationId]),
+  'vpn.check': z.tuple([]),
+  'vpn.setAppVpn': z.tuple([Id, z.enum(APP_VPN_CHOICES)]),
+  /** "Turn on for all apps" (vpn-only) / "Turn off for all apps" (direct). */
+  'vpn.setAllApps': z.tuple([z.enum(['vpn-only', 'direct'])]),
+  'vpn.startImport': z.tuple([]),
+  'vpn.chooseImportEntry': z.tuple([ImportEntry]),
+  'vpn.finishImport': z.tuple([VpnLabel]),
+  'vpn.cancelImport': z.tuple([]),
 
   // Settings
   'settings.get': z.tuple([]),
@@ -276,9 +300,20 @@ export interface CallResults {
   'player.command': Result
   'player.state': PlayerState
   'apps.list': AppEntry[]
-  'apps.launch': Result
+  'apps.launch': AppLaunchResult
   'apps.close': Result
   'apps.resetProfile': Result
+  'vpn.status': VpnStatus
+  'vpn.setEnabled': Result
+  'vpn.setLocation': Result
+  'vpn.removeLocation': Result
+  'vpn.check': VpnStatus
+  'vpn.setAppVpn': Result
+  'vpn.setAllApps': Result
+  'vpn.startImport': VpnImportStage
+  'vpn.chooseImportEntry': VpnImportStage
+  'vpn.finishImport': VpnImportStage
+  'vpn.cancelImport': Result
   'settings.get': Settings
   'settings.update': Settings
   'network.status': NetStatus
@@ -348,6 +383,10 @@ export interface EventPayloads {
   recovery: Record<string, never>
   /** A network trial started, ticked, changed its checks or ended (null). */
   netTrial: { trial: NetTrial | null }
+  /** The VPN's status changed (state, check, locations, app choices or the import step). */
+  vpn: { status: VpnStatus }
+  /** A VPN app was closed because the tunnel dropped (vpn.md review M9); Home shows a dialog. */
+  vpnDropped: { appId: string }
 }
 export type EventName = keyof EventPayloads
 
@@ -360,6 +399,8 @@ export const EVENT_SCHEMAS: { [K in EventName]: z.ZodType } = {
   system: z.object({ what: z.enum(['network', 'bluetooth', 'audio', 'display', 'updates', 'folders']) }),
   recovery: z.object({}).loose(),
   netTrial: z.object({ trial: NetTrialSchema.nullable() }).strict(),
+  vpn: z.object({ status: z.object({ state: z.string(), enabled: z.boolean() }).loose() }).strict(),
+  vpnDropped: z.object({ appId: z.string().max(200) }).strict(),
 }
 
 /** Wire format of a call's reply (Electron mangles thrown errors, so errors travel as data). */

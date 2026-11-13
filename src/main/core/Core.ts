@@ -32,6 +32,7 @@ export interface CoreOptions {
 }
 type Handlers = { [N in CallName]: (...args: CallArgs<N>) => Promise<CallResults[N]> }
 const ok: Result = { ok: true }
+const vpnMissing = (): never => { throw new SourceError("The VPN isn't available on this box yet.", 'unsupported') }
 
 export class Core {
   readonly hub: MediaHub
@@ -256,6 +257,18 @@ export class Core {
       },
       'apps.close': async () => { await this.apps.close(); this.setForeground({ kind: 'shell' }); return ok },
       'apps.resetProfile': async (id) => { await this.apps.resetProfile(id); return ok },
+      // VPN: placeholders until the VPN controller lands (tasks/032). Each refuses with plain text.
+      'vpn.status': async () => vpnMissing(),
+      'vpn.setEnabled': async () => vpnMissing(),
+      'vpn.setLocation': async () => vpnMissing(),
+      'vpn.removeLocation': async () => vpnMissing(),
+      'vpn.check': async () => vpnMissing(),
+      'vpn.setAppVpn': async () => vpnMissing(),
+      'vpn.setAllApps': async () => vpnMissing(),
+      'vpn.startImport': async () => vpnMissing(),
+      'vpn.chooseImportEntry': async () => vpnMissing(),
+      'vpn.finishImport': async () => vpnMissing(),
+      'vpn.cancelImport': async () => vpnMissing(),
       'settings.get': async () => this.settings.get(),
       'settings.update': async (patch) => {
         const value = this.settings.update(patch)

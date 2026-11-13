@@ -1,6 +1,7 @@
 // User settings: versioned with step-by-step migrations. Secrets (tokens) are NOT stored here; see SecretStore.
 import { z } from 'zod'
 import { MAX_SOURCES } from './limits'
+import { APP_VPN_CHOICES, MAX_VPN_LOCATIONS, VPN_LABEL_MAX, VPN_LOCATION_ID } from './vpn-types'
 
 export const SETTINGS_VERSION = 1
 
@@ -19,6 +20,20 @@ export const SourceConfig = z.object({
   enabled: z.boolean().default(true),
 })
 export type SourceConfig = z.infer<typeof SourceConfig>
+
+/** A saved VPN location. nmUuid is the NetworkManager profile; it never goes to the renderer (see vpn-types.ts). */
+export const VpnLocation = z.object({
+  id: z.string().regex(VPN_LOCATION_ID),
+  label: z.string().min(1).max(VPN_LABEL_MAX),
+  nmUuid: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
+  /** The first IPv4 DNS server from the file, used by the proxy and the health check; null = 9.9.9.9. */
+  dns: z.string().max(15).nullable().default(null),
+  addedAt: z.string().max(40),
+})
+export type VpnLocation = z.infer<typeof VpnLocation>
+
+// Early design drafts stored true/false per app; read those as 'vpn-only' / 'direct'.
+const AppVpnValue = z.preprocess((v) => (v === true ? 'vpn-only' : v === false ? 'direct' : v), z.enum(APP_VPN_CHOICES))
 
 export const Settings = z.object({
   version: z.literal(SETTINGS_VERSION),
@@ -99,19 +114,38 @@ export const Settings = z.object({
       units: z.enum(['c', 'f']).default('c'),
     })
     .prefault({}),
+  /**
+   * Per-app VPN (docs/design/vpn.md). Main-process only: the renderer can't patch it (see SettingsPatch below) and
+   * changes it through the vpn.* calls. Added without a version bump so an update rollback can still read the file.
+   */
+  vpn: z
+    .object({
+      enabled: z.boolean().default(false),
+      activeLocationId: z.string().regex(VPN_LOCATION_ID).nullable().default(null),
+      locations: z.array(VpnLocation).max(MAX_VPN_LOCATIONS).default([]),
+      /** App id -> choice. Apps with no entry connect directly. */
+      apps: z.record(z.string().max(64), AppVpnValue).default({}),
+    })
+    .prefault({}),
   /** Learned buttons: evdev/DOM key code -> action. */
   keymap: z.record(z.string().max(64), z.string().max(32)).default({}),
 })
 export type Settings = z.infer<typeof Settings>
 
+/** Settings the renderer may not patch: the version, and the VPN block (main changes it through the vpn.* calls). */
+type MainOnly = 'version' | 'vpn'
+
 /** Partial update sent from the UI. Top-level keys are replaced/merged one level deep by SettingsStore. */
 export type SettingsPatch = {
-  [K in Exclude<keyof Settings, 'version'>]?: Settings[K] extends unknown[] | Record<string, string>
+  [K in Exclude<keyof Settings, MainOnly>]?: Settings[K] extends unknown[] | Record<string, string>
     ? Settings[K]
     : Settings[K] extends object
       ? Partial<Settings[K]>
       : Settings[K]
 }
+
+/** What main itself may patch: everything the UI can, plus the VPN block. */
+export type MainSettingsPatch = SettingsPatch & { vpn?: Partial<Settings['vpn']> }
 
 /** Strip defaults so a patch only ever carries the fields the caller sent (a missing field must stay missing). */
 function withoutDefaults(schema: z.ZodType): z.ZodType {
@@ -131,7 +165,7 @@ function patchField(schema: z.ZodType): z.ZodType {
 export const SettingsPatch = z.object(
   Object.fromEntries(
     Object.entries(Settings.shape)
-      .filter(([k]) => k !== 'version')
+      .filter(([k]) => k !== 'version' && k !== 'vpn')
       .map(([k, v]) => [k, patchField(v as z.ZodType)]),
   ),
 ) as unknown as z.ZodType<SettingsPatch>

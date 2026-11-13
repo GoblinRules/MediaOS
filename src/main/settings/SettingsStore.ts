@@ -1,5 +1,5 @@
 import * as fs from 'node:fs/promises'
-import { Settings, defaultSettings, migrateSettings, type SettingsPatch } from '@shared/settings-schema'
+import { Settings, defaultSettings, migrateSettings, type MainSettingsPatch } from '@shared/settings-schema'
 import { atomicWrite, missing, renameWithRetry, type FileSystem } from './atomic'
 import { runtime, type Runtime } from '../core/runtime'
 import { silentLog, type Log } from '../log/Logger'
@@ -48,7 +48,7 @@ export class SettingsStore {
 
   get(): Settings { return structuredClone(this.value) }
 
-  update(patch: SettingsPatch): Settings {
+  update(patch: MainSettingsPatch): Settings {
     if (this.erased) {
       // A running or finished erase is followed straight away by a restart; only a failed one needs the user to act.
       throw new SourceError(this.eraseFailed ? "MediaOS couldn't finish erasing everything. Restart the box and try again." :
