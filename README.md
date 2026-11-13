@@ -80,7 +80,7 @@ The screenshots come from mock mode, with a made-up demo library.
 2. Check the download is complete. On Windows, in PowerShell:
 
    ```
-   Get-FileHash .\mediaos-release-0.2.0.iso -Algorithm SHA256
+   Get-FileHash .\mediaos-release-*.iso -Algorithm SHA256
    ```
 
    The long code it prints must match the one in the `.sha256` file. On Linux or macOS use
