@@ -7,6 +7,8 @@ if [ "$1" = "configure" ]; then
   systemctl enable greetd.service
   # Enable for the next boot only: starting it or restarting NetworkManager here would drop SSH.
   systemctl enable mediaos-net-handover.service
+  # Enable the tunnel firewall for the next boot only.
+  systemctl enable mediaos-firewall.service
   # Runs at boot only when an update was cut short by a power cut (see /usr/libexec/mediaos/update repair).
   systemctl enable mediaos-update-repair.service
   # Network folders: the root helper's socket, and mounting saved shares at boot. Both start at the next boot (an

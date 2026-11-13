@@ -16,5 +16,8 @@
   "HardwareAccelerationModeEnabled": true,
   "AutoplayAllowed": true,
   "DefaultNotificationsSetting": 2,
-  "DefaultGeolocationSetting": 2
+  "DefaultGeolocationSetting": 2,
+  "WebRtcIPHandlingPolicy": "disable_non_proxied_udp",
+  "DnsOverHttpsMode": "off",
+  "ExtensionInstallBlocklist": ["*"]
 }

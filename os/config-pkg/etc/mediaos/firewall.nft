@@ -1,0 +1,10 @@
+#!/usr/sbin/nft -f
+# MediaOS: refuse new connections that arrive through a MediaOS VPN tunnel (mosvpn*). Touches only this table.
+table inet mediaos
+delete table inet mediaos
+table inet mediaos {
+  chain input {
+    type filter hook input priority 0; policy accept;
+    iifname "mosvpn*" ct state new drop
+  }
+}

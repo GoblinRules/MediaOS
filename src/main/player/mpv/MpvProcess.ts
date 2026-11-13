@@ -49,7 +49,7 @@ export class MpvProcess {
     this.cancelled = false
     const args = ['--idle=yes', '--force-window=yes', `--input-ipc-server=${this.pipe}`, '--fullscreen',
       '--no-terminal', '--keep-open=no', '--osc=no', '--input-default-bindings=no', '--input-vo-keyboard=no',
-      '--hwdec=auto-safe', ...(this.opts.extraArgs ?? [])]
+      '--hwdec=auto-safe', '--ytdl=no', ...(this.opts.extraArgs ?? [])]
     const child = (this.opts.spawn ?? ((file, argv) => spawn(file, argv, { stdio: 'ignore', windowsHide: true })))(
       this.opts.mpvPath ?? 'mpv', args)
     this.child = child

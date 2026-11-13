@@ -63,7 +63,11 @@ export class Core {
     this.recovered.push(...(opts.notices ?? []))
     this.unsubs.push(this.hub.onChanged(() => this.emit('homeChanged', {})),
       this.player.onState((state) => this.playerChanged(state)),
-      this.apps.onExit(() => this.setForeground({ kind: 'shell' })),
+      this.apps.onExit((appId, reason) => {
+        this.setForeground({ kind: 'shell' })
+        if (reason === 'handover') this.emit('toast', { id: randomUUID(), tone: 'error',
+          text: `${findApp(appId)?.name ?? 'The app'} didn't open properly. Try again.` })
+      }),
       this.system.network.on('changed', () => this.emit('system', { what: 'network' })),
       this.system.network.on('trial', () => {
         const sequence = ++this.trialSequence

@@ -1,5 +1,5 @@
 import type { AppEntry } from '@shared/apps'
-import type { AppHost } from './types'
+import type { AppExitReason, AppHost } from './types'
 import { checkApp } from './chrome'
 import { silentLog, type Log } from '../log/Logger'
 
@@ -8,7 +8,7 @@ export interface MockAppOptions { openWindow: (app: AppEntry) => MockWindow; log
 
 export class MockAppHost implements AppHost {
   private current?: { appId: string; window: MockWindow }
-  private listeners = new Set<(id: string) => void>()
+  private listeners = new Set<(id: string, reason: AppExitReason) => void>()
   private queue: Promise<void> = Promise.resolve()
   constructor(private opts: MockAppOptions) {}
   launch(app: AppEntry): Promise<void> {
@@ -21,7 +21,7 @@ export class MockAppHost implements AppHost {
       window.onClosed(() => {
         if (this.current !== current) return
         this.current = undefined
-        for (const cb of this.listeners) cb(app.id)
+        for (const cb of this.listeners) cb(app.id, 'exited')
       })
     })
     this.queue = job
@@ -35,5 +35,7 @@ export class MockAppHost implements AppHost {
   }
   running(): string | undefined { return this.current?.appId }
   async resetProfile(appId: string): Promise<void> { (this.opts.logger ?? silentLog).info(`Mock profile reset: ${appId}`) }
-  onExit(cb: (id: string) => void): () => void { this.listeners.add(cb); return () => { this.listeners.delete(cb) } }
+  onExit(cb: (id: string, reason: AppExitReason) => void): () => void {
+    this.listeners.add(cb); return () => { this.listeners.delete(cb) }
+  }
 }

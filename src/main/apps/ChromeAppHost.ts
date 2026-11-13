@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import { relative, isAbsolute, resolve } from 'node:path'
 import type { AppEntry } from '@shared/apps'
-import type { AppHost } from './types'
+import type { AppExitReason, AppHost } from './types'
 import { chromeArgs, prepareProfile, profilePath } from './chrome'
 import { runtime, type Runtime } from '../core/runtime'
 import { missing, type FileSystem } from '../settings/atomic'
@@ -24,7 +24,7 @@ export interface ChromeHostOptions {
 
 export class ChromeAppHost implements AppHost {
   private current?: { id: string; child: ChildProcess }
-  private listeners = new Set<(id: string) => void>()
+  private listeners = new Set<(id: string, reason: AppExitReason) => void>()
   private queue: Promise<void> = Promise.resolve()
   private io: FileSystem
   private clock: Runtime
@@ -39,20 +39,35 @@ export class ChromeAppHost implements AppHost {
     return this.serial(async () => {
       await this.closeCurrent()
       const profile = profilePath(this.opts.profileDir, app.id)
+      await this.stopStray(profile)
       await this.checkPath(profile)
       await prepareProfile(profile, this.io, this.opts.logger)
       const child = (this.opts.spawn ?? ((file, argv) => spawn(file, argv, { stdio: 'ignore', windowsHide: true })))(
         this.opts.chromePath, args)
       const current = { id: app.id, child }
       this.current = current
-      const exited = () => {
+      let spawnedAt: number | undefined
+      const exited = (reason: AppExitReason) => {
         if (this.current !== current) return
         this.current = undefined
-        for (const cb of this.listeners) cb(app.id)
+        for (const cb of this.listeners) cb(app.id, reason)
       }
-      child.once('exit', exited)
-      child.once('error', exited)
-      await new Promise<void>((res, rej) => { child.once('spawn', res); child.once('error', rej) })
+      child.once('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+        if (this.current !== current) return
+        if (code === 0 && !signal && spawnedAt !== undefined && this.clock.now() - spawnedAt <= 2000) {
+          void this.serial(async () => {
+            if (this.current !== current) return
+            this.opts.logger?.error('Chrome handed the window to another browser; closing it')
+            await this.stopStray(profile)
+            exited('handover')
+          })
+        } else exited('exited')
+      })
+      child.once('error', () => exited('exited'))
+      await new Promise<void>((res, rej) => {
+        child.once('spawn', () => { spawnedAt = this.clock.now(); res() })
+        child.once('error', rej)
+      })
     })
   }
   private async closeCurrent(): Promise<void> {
@@ -102,5 +117,7 @@ export class ChromeAppHost implements AppHost {
     const rel = relative(root, actual)
     if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('Profile must be inside the profiles folder')
   }
-  onExit(cb: (id: string) => void): () => void { this.listeners.add(cb); return () => { this.listeners.delete(cb) } }
+  onExit(cb: (id: string, reason: AppExitReason) => void): () => void {
+    this.listeners.add(cb); return () => { this.listeners.delete(cb) }
+  }
 }

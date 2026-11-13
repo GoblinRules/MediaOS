@@ -1,0 +1,15 @@
+# Refuse new connections arriving through MediaOS VPN tunnels, leaving other firewall tables alone.
+[Unit]
+Description=MediaOS tunnel firewall
+DefaultDependencies=no
+Wants=network-pre.target
+Before=network-pre.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/mediaos/firewall.nft
+
+[Install]
+WantedBy=multi-user.target

@@ -58,7 +58,7 @@ describe('apps', () => {
     await host.launch(APP_CATALOG[0]!); await host.launch(APP_CATALOG[1]!)
     expect(windows[0]?.close).toHaveBeenCalled(); expect(host.running()).toBe(APP_CATALOG[1]!.id)
     callbacks[0]!(); expect(exit).not.toHaveBeenCalled()
-    callbacks[1]!(); expect(exit).toHaveBeenCalledWith(APP_CATALOG[1]!.id); expect(host.running()).toBeUndefined()
+    callbacks[1]!(); expect(exit).toHaveBeenCalledWith(APP_CATALOG[1]!.id, 'exited'); expect(host.running()).toBeUndefined()
     await host.close(); await host.resetProfile('youtube')
   })
   it('runs one Chrome at a time, escalates a stuck process and safely resets profiles', async () => {
@@ -81,8 +81,8 @@ describe('apps', () => {
       await vi.advanceTimersByTimeAsync(3000); await launch
       expect(children[0]?.kill).toHaveBeenCalledWith('SIGTERM')
       expect(children[0]?.kill).toHaveBeenCalledWith('SIGKILL'); expect(exit).not.toHaveBeenCalled()
-      children[1]!.emit('exit', 0)
-      expect(exit).toHaveBeenCalledWith(APP_CATALOG[1]!.id)
+      children[1]!.emit('exit', 1)
+      expect(exit).toHaveBeenCalledWith(APP_CATALOG[1]!.id, 'exited')
       expect(host.running()).toBeUndefined()
       await host.resetProfile('youtube')
       await expect(fs.stat(join(temp.dir, 'youtube'))).rejects.toThrow()
