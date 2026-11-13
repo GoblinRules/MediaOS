@@ -27,7 +27,7 @@ describe('core review regressions', () => {
       await core.dispatch('sources.rename', ['demo', 'Our library'])
       vi.spyOn(core.secrets, 'delete').mockRejectedValue(new Error('private disk details'))
       await expect(core.dispatch('sources.remove', ['demo'])).resolves.toEqual({ ok: true })
-      expect(await core.dispatch('sources.list', [])).toEqual([])
+      expect(await core.dispatch('sources.list', [])).toEqual([{ id: 'folders', kind: 'folders', name: 'Folders', status: 'ok' }])
       expect(core.settings.get().sources).toEqual([])
       expect(core.settings.get().demoRemoved).toBe(true)
       expect(warn.mock.calls).toEqual([['Saved sign-in could not be deleted']])
@@ -84,7 +84,7 @@ describe('core review regressions', () => {
       expect(() => core.settings.update({ deviceName: 'Late name', setupDone: true })).toThrow(message)
       expect(await handleCall(core, 'settings.update', [{ setupDone: true }])).toEqual({ ok: false, error: message })
       await expect(core.signin.password('http://test', 'guest', 'demo')).rejects.toThrow(message)
-      expect(core.hub.list().map((source) => source.id)).toEqual(['demo'])
+      expect(core.hub.list().map((source) => source.id)).toEqual(['demo', 'folders'])
       await core.secrets.set('late', { token: 'private' })
       stopped.resolve(); await reset; await composed.dispose()
       for (const name of ['settings.json', 'secrets.json']) {
@@ -102,7 +102,7 @@ describe('core review regressions', () => {
       await core.dispatch('shell.factoryReset', ['ERASE'])
       probe.resolve({ serverName: 'Test', version: '1', quickConnect: true, url: 'http://test' })
       await rejected; await core.settings.flush()
-      expect(core.hub.list().map((source) => source.id)).toEqual(['demo'])
+      expect(core.hub.list().map((source) => source.id)).toEqual(['demo', 'folders'])
       await expect(fs.stat(join(temp.dir, 'settings.json'))).rejects.toHaveProperty('code', 'ENOENT')
     } finally {
       probe.resolve({ serverName: 'Test', version: '1', quickConnect: true, url: 'http://test' })
@@ -178,7 +178,7 @@ describe('core review regressions', () => {
       await core.dispatch('settings.update', [{ sources: settings.sources.map((s) => ({ ...s, name: 'Our TV', enabled: false })),
         home: { ...settings.home, hero: false } }])
       expect(changed).toHaveBeenCalledTimes(1)
-      expect((await core.dispatch('home.get', [])).rows).toEqual([])
+      expect((await core.dispatch('home.get', [])).rows.map((row) => row.id)).toEqual(['lib:folders~usb-mock'])
       await core.dispatch('settings.update', [{ sources: settings.sources }])
       expect(changed).toHaveBeenCalledTimes(2)
       await core.dispatch('settings.update', [{ home: { ...settings.home, hero: false } }])

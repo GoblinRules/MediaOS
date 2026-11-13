@@ -12,6 +12,7 @@ import { IpTrial } from '../net/IpTrial'
 import { memoryJournal } from '../net/MemoryJournal'
 import { MockTrialBackend } from './MockTrialBackend'
 import { UserFacingError } from '../net/texts'
+import { createMockFolders } from './MockFolders'
 
 export interface MockSystemOptions {
   scenario?: 'default' | 'offline' | 'noCec' | 'wifiOnly' | 'netUnmanaged'
@@ -22,6 +23,7 @@ export interface MockSystemOptions {
   fs?: FileSystem
   journalPath?: string
   trialSec?: number
+  foldersDir?: string
 }
 const ok: Result = { ok: true }
 
@@ -113,7 +115,9 @@ export function createMockSystem(opts: MockSystemOptions = {}): SystemServices &
       return result
     } finally { update.running = undefined; changed(updateListeners) }
   }
+  const folders = createMockFolders({ foldersDir: opts.foldersDir, delayMs: opts.delayMs, timers: clock, logger: log })
   const system: SystemServices & { dispose(): void } = {
+    folders,
     network: {
       status: async () => structuredClone(network),
       scanWifi: async () => { await wait(); return structuredClone(wifi) },
@@ -230,6 +234,7 @@ export function createMockSystem(opts: MockSystemOptions = {}): SystemServices &
         info: () => system.info.get(), screenOn, fs: io }),
     },
     dispose: () => {
+      folders.dispose()
       trial.dispose()
       networkListeners.clear(); bluetoothListeners.clear(); updateListeners.clear()
       for (const [timer, done] of waiting) { clock.clearTimeout(timer); done() }

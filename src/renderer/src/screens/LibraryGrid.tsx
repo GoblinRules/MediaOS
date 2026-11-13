@@ -8,6 +8,7 @@ import { canFavourite, focusedItem, selectItem } from '../lib/items'
 import { useSettings } from '../state/settings'
 import { splitKey } from '@shared/media-types'
 import { focusScreen, menu, useScreenFocus, type Entry } from '../state/nav'
+import { currentFocus } from '../input/focus'
 import { Button, FocusGroup } from '../components/Focusable'
 import { Notice, Spinner } from '../components/Row'
 import { MediaTile } from '../components/Tile'
@@ -148,8 +149,25 @@ export function LibraryGrid({ entry, libraryKey, title }: { entry: Entry; librar
   }, [needMore, load, items.length, moreError, data, error])
 
   const ready = data?.q === q || error?.q === q
-  const fallback = useCallback(() => (items[0] ? `grid:${items[0].key}` : 'grid:sort'), [items])
+  const failed = error?.q === q && items.length === 0
+  const fallback = useCallback(() => (items[0] ? `grid:${items[0].key}` : failed ? 'grid:retry' : 'grid:sort'), [items, failed])
   useScreenFocus(entry, ready, fallback)
+  // After Try again has an answer: back to the button if it failed again, or onto the first poster if it loaded,
+  // unless the user has moved on from Sort while waiting.
+  const retried = useRef(false)
+  useEffect(() => {
+    if (!retried.current || !ready) return
+    retried.current = false
+    if (currentFocus() === 'grid:sort') focusScreen(fallback())
+  }, [ready, fallback])
+  const retry = (): void => {
+    // The button goes while the library loads again, so put focus somewhere that stays.
+    focusScreen('grid:sort')
+    retried.current = true
+    setError(undefined)
+    epoch.current += 1
+    load(0, Math.max(PAGE, remembered.current ?? 0))
+  }
 
   const setPref = (p: Partial<{ sort: SortKey; filter: BrowseFilter }>): void =>
     viewPrefs.set((all) => ({ ...all, [libraryKey]: { ...prefs, ...p } }))
@@ -196,7 +214,11 @@ export function LibraryGrid({ entry, libraryKey, title }: { entry: Entry; librar
         </FocusGroup>
       </header>
       {!ready && <Spinner />}
-      {error?.q === q && items.length === 0 && <Notice icon={<Icon name="warning" size="3rem" />} title="This library could not load" body={error.text} />}
+      {failed && (
+        <Notice icon={<Icon name="warning" size="3rem" />} title="This library could not load" body={error?.text}>
+          <Button focusKey="grid:retry" label="Try again" primary icon={<Icon name="refresh" />} onSelect={retry} testId="grid-retry" />
+        </Notice>
+      )}
       {data?.q === q && items.length === 0 && (
         <Notice title="Nothing here" body={prefs.filter === 'all' ? 'This library is empty.' : 'Nothing matches. Try "Show: Everything".'} />
       )}

@@ -3,9 +3,10 @@ import { createInterface } from 'node:readline'
 import { silentLog, type Log } from '../../log/Logger'
 import { redact } from '../../log/redact'
 
-export type CommandResult = { code: number; stdout: string; stderr: string } | { fail: 'timeout' | 'notFound' }
+/** `truncated` means the output passed `maxBytes`, so the command was stopped and `stdout` holds only the start. */
+export type CommandResult = { code: number; stdout: string; stderr: string; truncated?: true } | { fail: 'timeout' | 'notFound' }
 export interface CommandRunner {
-  run(file: string, args: readonly string[], opts: { timeoutMs: number }): Promise<CommandResult>
+  run(file: string, args: readonly string[], opts: { timeoutMs: number; maxBytes?: number }): Promise<CommandResult>
   /** onExit also fires on spawn failure. It lets the monitor owner restart with its injected clock. */
   spawnLines(file: string, args: readonly string[], onLine: (line: string) => void, onExit?: () => void): { kill(): void }
 }
@@ -13,18 +14,25 @@ const env = () => ({ ...process.env, LC_ALL: 'C', LANG: 'C' })
 
 export class NodeCommandRunner implements CommandRunner {
   constructor(private logger: Log = silentLog) {}
-  run(file: string, args: readonly string[], opts: { timeoutMs: number }): Promise<CommandResult> {
+  run(file: string, args: readonly string[], opts: { timeoutMs: number; maxBytes?: number }): Promise<CommandResult> {
     if (opts.timeoutMs <= 0) return Promise.resolve({ fail: 'timeout' })
     return new Promise((resolve) => {
       try {
-        execFile(file, [...args], { shell: false, maxBuffer: 1024 * 1024, env: env(),
+        execFile(file, [...args], { shell: false, maxBuffer: opts.maxBytes ?? 1024 * 1024, env: env(),
           timeout: opts.timeoutMs, killSignal: 'SIGKILL', encoding: 'utf8' }, (error, stdout, stderr) => {
           if (stderr) this.logger.warn('Network command diagnostic', redact(stderr))
           if (error && 'code' in error && error.code === 'ENOENT') resolve({ fail: 'notFound' })
+          else if (error && 'code' in error && error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+            resolve({ code: 1, stdout, stderr, truncated: true })
+          }
           else if (error?.killed) resolve({ fail: 'timeout' })
           else resolve({ code: error ? typeof error.code === 'number' ? error.code : 1 : 0, stdout, stderr })
         })
-      } catch { resolve({ fail: 'notFound' }) }
+      } catch (error) {
+        // Node refuses some arguments (a NUL, say) before starting anything: say so rather than fail silently.
+        this.logger.warn('Command could not start', file, error instanceof Error ? error.message : String(error))
+        resolve({ fail: 'notFound' })
+      }
     })
   }
   spawnLines(file: string, args: readonly string[], onLine: (line: string) => void, onExit?: () => void): { kill(): void } {

@@ -13,6 +13,7 @@ import type {
 import { Settings, SettingsPatch } from './settings-schema'
 import { ACTIONS, type Action } from './actions'
 import { MAX_SOURCES } from './limits'
+import type { FolderAddResult, FolderList, FoundComputer } from './folder-types'
 
 export const CALL_CHANNEL = 'mediaos:call'
 export const EVENT_CHANNEL = 'mediaos:event'
@@ -50,6 +51,29 @@ const PlayerCommand = z.discriminatedUnion('kind', [
 // Network IP settings. Main runs checkIpConfig (src/shared/ipv4.ts) again after these.
 const Octet = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)'
 const Ipv4 = z.string().min(7).max(15).regex(new RegExp(`^${Octet}(?:\\.${Octet}){3}$`), 'IPv4 address')
+// eslint-disable-next-line no-control-regex -- Folder credentials must refuse control characters before IPC.
+const folderString = (max: number) => z.string().max(max).refine((s) => !/[\x00-\x1f\x7f]/.test(s))
+const loginFields = {
+  server: folderString(253).transform((s) => s.trim().replace(/^(?:\\\\|\/\/)/, '').replace(/\.$/, '').toLowerCase())
+    .pipe(z.string().min(1).max(253).regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,62}(?:\.[A-Za-z0-9][A-Za-z0-9_-]{0,62})*$/)),
+  ip: folderString(15).pipe(Ipv4).optional(), guest: z.boolean(), user: folderString(256).regex(/^[^\\/]*$/).optional(),
+  password: folderString(256).optional(), domain: folderString(64).trim().regex(/^[A-Za-z0-9._-]*$/).optional(),
+}
+function splitDomain(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || !('user' in value) || typeof value.user !== 'string') return value
+  if ('domain' in value && value.domain !== undefined) {
+    if (typeof value.domain !== 'string' || !folderString(64).safeParse(value.domain).success || value.domain.trim()) return value
+  }
+  const parts = value.user.split('\\')
+  return parts.length === 2 ? { ...value, domain: parts[0], user: parts[1] } : value
+}
+const hasUser = (v: { guest: boolean; user?: string }) => v.guest || !!v.user?.trim()
+export const FolderLoginSchema = z.preprocess(splitDomain, z.object(loginFields).refine(hasUser))
+export const FolderAddSchema = z.preprocess(splitDomain, z.object({ ...loginFields,
+  share: folderString(80).trim().min(1).regex(/^[^/\\,%]+$/).refine((s) => s !== '.' && s !== '..'),
+  name: folderString(60).optional(),
+}).refine(hasUser))
+const FolderId = z.string().length(12).regex(/^smb-[a-f0-9]{8}$/)
 const ProfileId = z.string().min(1).max(64).regex(/^[A-Za-z0-9:_-]+$/, 'profile id')
 const DnsChoice = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('auto') }).strict(),
@@ -75,6 +99,12 @@ const NetTrialSchema = z.object({
 
 /** Argument schemas for every call, as tuples. */
 export const CALLS = {
+  'folders.list': z.tuple([]),
+  'folders.discover': z.tuple([]),
+  'folders.listShares': z.tuple([FolderLoginSchema]),
+  'folders.add': z.tuple([FolderAddSchema]),
+  'folders.remove': z.tuple([FolderId]),
+  'folders.retry': z.tuple([FolderId]),
   // Home and browsing
   'home.get': z.tuple([]),
   'home.refresh': z.tuple([]),
@@ -213,6 +243,12 @@ export type SignInPoll =
   | { state: 'error'; message: string }
 
 export interface CallResults {
+  'folders.list': FolderList
+  'folders.discover': FoundComputer[]
+  'folders.listShares': string[]
+  'folders.add': FolderAddResult
+  'folders.remove': Result
+  'folders.retry': Result
   'home.get': HomeData
   'home.refresh': HomeData
   'sources.list': SourceInfo[]
@@ -307,7 +343,7 @@ export interface EventPayloads {
   toast: Toast
   foreground: Foreground
   /** Something in Settings > Network / Bluetooth changed. */
-  system: { what: 'network' | 'bluetooth' | 'audio' | 'display' | 'updates' }
+  system: { what: 'network' | 'bluetooth' | 'audio' | 'display' | 'updates' | 'folders' }
   /** Core asks the UI to open the Recovery menu (long Home, Ctrl+Alt+Backspace, crash loop). */
   recovery: Record<string, never>
   /** A network trial started, ticked, changed its checks or ended (null). */
@@ -321,7 +357,7 @@ export const EVENT_SCHEMAS: { [K in EventName]: z.ZodType } = {
   homeChanged: z.object({}).loose(),
   toast: z.object({ id: z.string(), text: z.string().max(500), tone: z.enum(['info', 'warn', 'error', 'ok']).optional() }),
   foreground: z.object({ kind: z.enum(['shell', 'player', 'app']), appId: z.string().optional() }),
-  system: z.object({ what: z.enum(['network', 'bluetooth', 'audio', 'display', 'updates']) }),
+  system: z.object({ what: z.enum(['network', 'bluetooth', 'audio', 'display', 'updates', 'folders']) }),
   recovery: z.object({}).loose(),
   netTrial: z.object({ trial: NetTrialSchema.nullable() }).strict(),
 }

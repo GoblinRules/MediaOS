@@ -61,7 +61,7 @@ export interface PlayOptions {
   subIdx?: number
 }
 
-export type ReportEvent = { state: 'start' | 'progress' | 'paused' | 'stopped'; positionSec: number }
+export type ReportEvent = { state: 'start' | 'progress' | 'paused' | 'stopped'; positionSec: number; durationSec?: number }
 
 /** A thrown error a user can understand. `code` lets the UI pick a specific screen. */
 export class SourceError extends Error {

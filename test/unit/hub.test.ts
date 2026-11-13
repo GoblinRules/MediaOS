@@ -11,6 +11,21 @@ function item(sourceId: string, id: string, extra: Partial<MediaItem> = {}): Med
 afterEach(() => vi.useRealTimers())
 
 describe('MediaHub', () => {
+  it('keeps the other libraries and continue row when one library browse fails', async () => {
+    const source = new FixtureSource()
+    const browse = source.browse.bind(source)
+    vi.spyOn(source, 'browse').mockImplementation((id, query) => id === 'movies' ?
+      Promise.reject(new SourceError('Offline folder', 'offline')) : browse(id, query))
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const hub = new MediaHub({ logger }); hub.add(source)
+    try {
+      const home = await hub.home(options)
+      expect(home.rows.some((row) => row.id === 'lib:demo~shows')).toBe(true)
+      expect(home.rows.some((row) => row.id === 'lib:demo~movies')).toBe(false)
+      expect(home.rows.some((row) => row.id === 'continue')).toBe(true)
+      expect(logger.warn).toHaveBeenCalledOnce()
+    } finally { hub.dispose() }
+  })
   it('builds ordered rows, skips apps and hidden rows, sorts and limits, and builds a hero', async () => {
     const a = new FixtureSource({ id: 'a' }), b = new FixtureSource({ id: 'b' })
     const sourceRows = (sourceId: string) => ({
@@ -83,6 +98,18 @@ describe('MediaHub', () => {
       const result = await pending
       expect(result.sources[0]).toMatchObject({ status: 'offline' })
       expect(result.rows.every((r) => r.items.every((i) => i.sourceId === 'fast'))).toBe(true)
+    } finally { hub.dispose() }
+  })
+  it('says folders are slow, not that a server is off, when the folders source times out', async () => {
+    vi.useFakeTimers()
+    const source = new FixtureSource({ id: 'folders' })
+    Object.defineProperty(source, 'kind', { value: 'folders' })
+    vi.spyOn(source, 'item').mockImplementation(() => new Promise(() => undefined))
+    const hub = new MediaHub({ timeoutMs: 80 }); hub.add(source)
+    try {
+      const pending = expect(hub.item('folders~x')).rejects.toMatchObject({ code: 'timeout',
+        message: 'Your folders are taking a long time to open. Try again in a moment.' })
+      await vi.advanceTimersByTimeAsync(80); await pending
     } finally { hub.dispose() }
   })
   it('keeps the source signed-out message after an authentication failure', async () => {

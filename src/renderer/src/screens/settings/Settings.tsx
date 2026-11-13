@@ -15,7 +15,7 @@ const PAGES: { id: SettingsPage; label: string; icon: string; hint: string; View
   { id: 'display', label: 'Display', icon: 'display', hint: 'Picture size, text size, screensaver', View: DisplayPage },
   { id: 'sound', label: 'Sound', icon: 'sound', hint: 'Speakers and volume', View: SoundPage },
   { id: 'remotes', label: 'Remotes', icon: 'remote', hint: 'TV remote, Bluetooth, phone', View: RemotesPage },
-  { id: 'libraries', label: 'Libraries', icon: 'server', hint: 'Jellyfin and Plex servers', View: LibrariesPage },
+  { id: 'libraries', label: 'Libraries', icon: 'server', hint: 'Servers, network folders and drives', View: LibrariesPage },
   { id: 'home', label: 'Home screen', icon: 'home', hint: 'Rows and layout', View: HomePage },
   { id: 'apps', label: 'Apps', icon: 'apps', hint: 'Streaming apps', View: AppsPage },
   { id: 'playback', label: 'Playback', icon: 'play', hint: 'Subtitles, languages, skipping', View: PlaybackPage },

@@ -18,7 +18,8 @@ describe('Jellyfin composition', () => {
     try {
       const list = await handleCall(composed.core, 'sources.list', [])
       expect(list.ok).toBe(true)
-      if (list.ok) expect(list.value).toMatchObject([{ id: 'saved', status: 'ok' }, { id: 'missing', status: 'signed-out' }])
+      if (list.ok) expect(list.value).toMatchObject([{ id: 'saved', status: 'ok' }, { id: 'missing', status: 'signed-out' },
+        { id: 'folders', status: 'ok' }])
       expect(JSON.stringify(list)).not.toContain('private-token')
     } finally { await composed.dispose(); await temp.dispose() }
   })

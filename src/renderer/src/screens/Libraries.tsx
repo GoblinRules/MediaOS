@@ -9,6 +9,12 @@ import { Icon } from '../components/Icon'
 
 const KIND_ICON: Record<Library['kind'], string> = { movies: 'film', shows: 'tv', mixed: 'libraries' }
 
+/** Network folders and USB drives (the Folders library) get their own picture; server libraries go by kind. */
+function libraryIcon(l: Library): string {
+  if (l.sourceId === 'folders') return l.id.startsWith('usb-') ? 'usb' : 'folderNet'
+  return KIND_ICON[l.kind]
+}
+
 function groups(libs: Library[], sources: SourceInfo[]): { source: SourceInfo | undefined; id: string; libs: Library[] }[] {
   const out = new Map<string, Library[]>()
   for (const l of libs) out.set(l.sourceId, [...(out.get(l.sourceId) ?? []), l])
@@ -36,10 +42,10 @@ export function LibrariesScreen({ entry }: { entry: Entry }): ReactNode {
         <Notice
           icon={<Icon name="server" size="3rem" />}
           title="No libraries yet"
-          body="Add a Jellyfin or Plex server and its libraries appear here."
+          body="Add a Jellyfin or Plex server, or a network folder, and its libraries appear here."
           testId="libraries-empty"
         >
-          <Button focusKey="libs:add" label="Add a server" primary icon={<Icon name="plus" />} onSelect={() => goTab('settings', 'libraries')} />
+          <Button focusKey="libs:add" label="Add a server or folder" primary icon={<Icon name="plus" />} onSelect={() => goTab('settings', 'libraries')} />
         </Notice>
       )}
       {list.map((g) => (
@@ -58,7 +64,7 @@ export function LibrariesScreen({ entry }: { entry: Entry }): ReactNode {
                 testId="library-card"
                 onSelect={() => push({ name: 'library', key: l.key, title: l.title })}
               >
-                <Icon name={KIND_ICON[l.kind]} size="2.6rem" />
+                <Icon name={libraryIcon(l)} size="2.6rem" />
                 <span className="lib-title">{l.title}</span>
                 {l.itemCount !== undefined && <span className="lib-count">{l.itemCount.toLocaleString('en-GB')} items</span>}
               </Focusable>

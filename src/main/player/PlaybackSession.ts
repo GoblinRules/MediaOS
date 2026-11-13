@@ -86,7 +86,7 @@ export class PlaybackSession {
     await this.reports
   }
   private report(state: ReportEvent['state']): void {
-    const event = { state, positionSec: this.position }
+    const event = { state, positionSec: this.position, durationSec: this.duration }
     const handle = this.plan.report
     this.reports = this.reports.then(() => this.source.report(handle, event)).catch((error: unknown) => {
       ;(this.opts.logger ?? silentLog).warn('Playback progress could not be saved', error)

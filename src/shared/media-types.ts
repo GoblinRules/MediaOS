@@ -1,8 +1,8 @@
 // Shapes shared by the main process (core) and the renderer (UI).
 // Pure types + tiny pure helpers only: no Node, no DOM imports.
 
-export type SourceKind = 'jellyfin' | 'plex' | 'fixture'
-export type ItemType = 'movie' | 'show' | 'season' | 'episode' | 'video'
+export type SourceKind = 'jellyfin' | 'plex' | 'fixture' | 'folders'
+export type ItemType = 'movie' | 'show' | 'season' | 'episode' | 'video' | 'folder'
 export type ImageKind = 'poster' | 'backdrop' | 'thumb' | 'logo'
 
 /** A playable or browsable thing from one media server. `key` is globally unique: `${sourceId}~${id}`. */

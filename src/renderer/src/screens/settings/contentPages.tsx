@@ -1,5 +1,6 @@
 // Settings pages about what you watch: libraries (servers), the Home screen, apps, playback and the system.
 import { useEffect, useState, type ReactNode } from 'react'
+import type { FolderDrive, FolderShare } from '@shared/folder-types'
 import type { SourceInfo, SourceStatus } from '@shared/media-types'
 import type { HomeRowId, Settings } from '@shared/settings-schema'
 import type { UpdateAction } from '@shared/system-types'
@@ -12,6 +13,7 @@ import { confirm, focusScreen, keyboard, menu } from '../../state/nav'
 import { loadSettings, updateSettings, useSettings } from '../../state/settings'
 import { toast } from '../../state/toasts'
 import { ChoiceRow, RowsState, Section, SettingRow, StepperRow, ToggleRow } from './parts'
+import { FolderAddFlow } from './FolderAdd'
 import { SignInFlow, type SignInKind } from './SignIn'
 
 type K = { k: (n: string) => string; prefix: string }
@@ -28,7 +30,7 @@ const STATUS: Record<SourceStatus, string> = {
 
 function sourceDetail(s: SourceInfo): string {
   if (s.status !== 'ok' && s.message) return s.message
-  const kind = s.kind === 'plex' ? 'Plex' : s.kind === 'jellyfin' ? 'Jellyfin' : 'Demo'
+  const kind = s.kind === 'plex' ? 'Plex' : s.kind === 'jellyfin' ? 'Jellyfin' : s.kind === 'folders' ? 'Folders' : 'Demo'
   return [kind, s.serverName && s.serverName !== s.name ? s.serverName : undefined, s.userName && `signed in as ${s.userName}`]
     .filter(Boolean)
     .join(' · ')
@@ -41,7 +43,7 @@ async function refreshSources(): Promise<void> {
 
 export function LibrariesPage({ k, prefix }: K): ReactNode {
   const list = useCall('sources.list', [])
-  const [adding, setAdding] = useState<{ kind: SignInKind; url?: string; from: string }>()
+  const [adding, setAdding] = useState<{ kind: SignInKind | 'folder'; url?: string; from: string }>()
   // An object so asking for the same row twice still moves focus.
   const [refocus, setRefocus] = useState<{ key: string }>()
 
@@ -53,6 +55,19 @@ export function LibrariesPage({ k, prefix }: K): ReactNode {
     const back = (): void => {
       setAdding(undefined)
       setRefocus({ key: adding.from })
+    }
+    if (adding.kind === 'folder') {
+      return (
+        <FolderAddFlow
+          prefix={prefix}
+          onCancel={back}
+          onDone={(name) => {
+            toast(`Added ${name}`, 'ok')
+            back()
+            void refreshSources().then(list.reload)
+          }}
+        />
+      )
     }
     return (
       <SignInFlow
@@ -109,9 +124,12 @@ export function LibrariesPage({ k, prefix }: K): ReactNode {
       { id: 'remove', label: 'Remove', icon: 'trash', danger: true, onSelect: () => remove(s) },
     ])
 
+  // Network folders and USB drives have their own section; the Folders library itself can't be renamed or removed.
+  const servers = list.data?.filter((s) => s.kind !== 'folders')
+
   return (
     <>
-      <Section title="Add a library" hint="MediaOS plays films and shows from your own Jellyfin or Plex server.">
+      <Section title="Add a library" hint="MediaOS plays films and shows from your own Jellyfin or Plex server, network folders and USB drives.">
         <SettingRow
           focusKey={k('add-jellyfin')}
           icon="server"
@@ -130,11 +148,21 @@ export function LibrariesPage({ k, prefix }: K): ReactNode {
           opens
           testId="add-plex"
         />
+        <SettingRow
+          focusKey={k('add-folder')}
+          icon="folderNet"
+          label="Add a network folder"
+          detail="A shared folder on a computer or NAS, for films kept as plain files."
+          onSelect={() => setAdding({ kind: 'folder', from: k('add-folder') })}
+          opens
+          testId="add-folder"
+        />
       </Section>
-      <Section title="Your libraries">
+      <FolderRows k={k} />
+      <Section title="Your servers">
         <RowsState loading={list.loading && !list.data} error={list.error} focusKey={k('retry')} onRetry={list.reload} />
-        {list.data?.length === 0 && <div className="set-loading">No libraries yet. Add one above.</div>}
-        {(list.data ?? []).map((s) => (
+        {servers?.length === 0 && <div className="set-loading">No servers yet. Add one above.</div>}
+        {(servers ?? []).map((s) => (
           <SettingRow
             key={s.id}
             focusKey={k(`src:${s.id}`)}
@@ -150,6 +178,78 @@ export function LibrariesPage({ k, prefix }: K): ReactNode {
         ))}
       </Section>
     </>
+  )
+}
+
+function sizeText(bytes?: number): string | undefined {
+  if (!bytes) return undefined
+  const gb = bytes / 1e9
+  return gb >= 1000 ? `${(gb / 1000).toFixed(1)} TB` : gb >= 10 ? `${Math.round(gb)} GB` : `${gb.toFixed(1)} GB`
+}
+
+function shareDetail(f: FolderShare): string {
+  if (!f.available) return f.problem ?? 'Not connected yet.'
+  const path = `\\\\${f.server}\\${f.share}`
+  return [path, f.guest ? 'as a guest' : f.user && `as ${f.user}`].filter(Boolean).join(' · ')
+}
+
+/** Network folders (with a menu to try again or remove) and plugged-in USB drives. */
+function FolderRows({ k }: { k: (n: string) => string }): ReactNode {
+  const list = useCall('folders.list', [])
+  const shares = list.data?.shares ?? []
+  const drives = list.data?.drives ?? []
+  if (!list.error && shares.length === 0 && drives.length === 0) return null
+
+  const retry = (f: FolderShare): void =>
+    void run('folders.retry', f.id).then((ok) => {
+      if (ok) toast(`Connected to ${f.name}`, 'ok')
+      invalidateData()
+    })
+  const remove = (f: FolderShare): void =>
+    confirm({
+      title: `Remove ${f.name}?`,
+      body: 'Its films disappear from MediaOS. Nothing is deleted from the computer that shares it.',
+      confirmLabel: 'Remove',
+      danger: true,
+      onConfirm: () =>
+        void run('folders.remove', f.id).then(async (ok) => {
+          if (ok) {
+            toast(`Removed ${f.name}`, 'ok')
+            await refreshSources()
+            focusScreen(k('add-folder'))
+          }
+          list.reload()
+        }),
+    })
+  const options = (f: FolderShare): void =>
+    menu(f.name, [
+      ...(f.available ? [] : [{ id: 'retry', label: 'Try again', icon: 'refresh', onSelect: () => retry(f) }]),
+      { id: 'remove', label: 'Remove', icon: 'trash', danger: true, onSelect: () => remove(f) },
+    ])
+  const driveDetail = (d: FolderDrive): string =>
+    [sizeText(d.sizeBytes), 'Plugged in. Unplug it to remove it.'].filter(Boolean).join(' · ')
+
+  return (
+    <Section title="Network folders and USB drives" hint="Their films show up together in a library called Folders.">
+      <RowsState loading={false} error={list.error} focusKey={k('folders-retry')} onRetry={list.reload} />
+      {shares.map((f) => (
+        <SettingRow
+          key={f.id}
+          focusKey={k(`folder:${f.id}`)}
+          icon={f.available ? 'folderNet' : 'warning'}
+          label={f.name}
+          detail={shareDetail(f)}
+          value={f.available ? 'Connected' : "Can't open it"}
+          onSelect={() => options(f)}
+          onMenu={() => options(f)}
+          opens
+          testId={`folder-${f.id}`}
+        />
+      ))}
+      {drives.map((d) => (
+        <SettingRow key={d.id} focusKey={k(`drive:${d.id}`)} icon="usb" label={d.name} detail={driveDetail(d)} testId={`drive-${d.id}`} />
+      ))}
+    </Section>
   )
 }
 

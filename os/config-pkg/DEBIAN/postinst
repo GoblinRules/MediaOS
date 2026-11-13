@@ -9,6 +9,9 @@ if [ "$1" = "configure" ]; then
   systemctl enable mediaos-net-handover.service
   # Runs at boot only when an update was cut short by a power cut (see /usr/libexec/mediaos/update repair).
   systemctl enable mediaos-update-repair.service
+  # Network folders: the root helper's socket, and mounting saved shares at boot. Both start at the next boot (an
+  # update always ends with a restart), like every other unit here.
+  systemctl enable mediaos-shares.socket mediaos-shares-mount.service
   systemctl set-default graphical.target
   # TV-remote (HDMI-CEC) button remap and the Pulse-Eight adapter rule. Both apply when a device is next plugged
   # in (or at the next boot); inside the installer udev isn't running, which is fine.

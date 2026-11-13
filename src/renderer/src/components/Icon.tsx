@@ -167,6 +167,19 @@ const PATHS: Record<string, ReactNode> = {
   ),
   sliders: <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4" />,
   pin: <path d="M9 3h6l-1 6 3 3H7l3-3zM12 12v9" />,
+  folder: <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" />,
+  folderNet: (
+    <>
+      <path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9l2 2h8.5A1.5 1.5 0 0 1 21 7.5V14a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 14z" />
+      <path d="M12 15.5V19M5 19h14" />
+    </>
+  ),
+  usb: (
+    <>
+      <rect x="8" y="3" width="8" height="6" rx="1" />
+      <path d="M6 9h12v8a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4zM10.5 5.5h.01M13.5 5.5h.01" />
+    </>
+  ),
 }
 
 export type IconName = keyof typeof PATHS

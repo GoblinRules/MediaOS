@@ -1,0 +1,14 @@
+[Unit]
+Description=Mount MediaOS network folders
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Not ordered before the home screen: a slow or missing server never holds up the TV. The screen retries a share
+# that isn't mounted when it is opened.
+Type=oneshot
+ExecStart=/usr/libexec/mediaos/shares mount-all
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

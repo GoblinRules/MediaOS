@@ -57,7 +57,8 @@ export function HomeScreen({ entry }: { entry: Entry }): ReactNode {
   const apps = useCall('apps.list', [])
   const rows = useMemo(() => buildRows(home.data, apps.data, settings), [home.data, apps.data, settings])
   const sources = home.data?.sources ?? []
-  const noSources = Boolean(home.data) && sources.length === 0
+  // The Folders library is always there, so count only real servers; folders with films still fill the rows.
+  const noSources = Boolean(home.data) && rows.length === 0 && sources.every((s) => s.kind === 'folders')
   const problems = sources.filter((s) => s.status !== 'ok' && s.status !== 'connecting')
 
   const failed = Boolean(home.error && !home.data)
@@ -98,10 +99,10 @@ export function HomeScreen({ entry }: { entry: Entry }): ReactNode {
             <Notice
               icon={<Icon name="server" size="3rem" />}
               title="Add your media"
-              body="Connect a Jellyfin or Plex server to see your films and shows here."
+              body="Connect a Jellyfin or Plex server, or add a network folder, to see your films and shows here."
               testId="home-no-sources"
             >
-              <Button focusKey="home:add-server" label="Add a server" primary icon={<Icon name="plus" />} onSelect={() => goTab('settings', 'libraries')} />
+              <Button focusKey="home:add-server" label="Add a server or folder" primary icon={<Icon name="plus" />} onSelect={() => goTab('settings', 'libraries')} />
             </Notice>
           </FocusGroup>
         )}

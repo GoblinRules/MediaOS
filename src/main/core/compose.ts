@@ -31,6 +31,10 @@ import { PlexSource } from '../sources/plex/PlexSource'
 import { randomUUID } from 'node:crypto'
 import type { Runtime } from './runtime'
 import type { Action } from '@shared/actions'
+import { FolderSource } from '../sources/folders/FolderSource'
+import { ProgressStore } from '../sources/folders/ProgressStore'
+import { FindLister, FsLister } from '../sources/folders/listing'
+import { NodeCommandRunner } from '../system/linux/CommandRunner'
 
 export interface ComposeOptions {
   platform: 'linux' | 'mock'
@@ -130,7 +134,8 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const apps: AppHost = chrome ?? new MockAppHost({ logger: logger.child('apps'),
     openWindow: opts.openAppWindow ?? (() => ({ close() {}, onClosed() {} })) })
   const mock = createMockSystem({ logger: logger.child('system'), logDir: opts.logDir, clock: opts.clock,
-    delayMs: opts.mockDelayMs, journalPath: join(opts.dataDir, 'net-trial.json'), trialSec: opts.netTrialSec })
+    delayMs: opts.mockDelayMs, journalPath: join(opts.dataDir, 'net-trial.json'), trialSec: opts.netTrialSec,
+    foldersDir: join(opts.dataDir, 'mock-folders') })
   const net = linux && opts.realSystem?.includes('network')
     ? createLinuxNetwork({ logger: logger.child('network'), journal: join(opts.dataDir, 'net-trial.json'),
       clock: opts.clock, trialSec: opts.netTrialSec }) : undefined
@@ -140,6 +145,11 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const system = linuxSystem ? { ...linuxSystem, network: net ?? mock.network,
     info: net ? withRealIp(linuxSystem.info, net) : linuxSystem.info,
     dispose() { net?.dispose(); linuxSystem.dispose(); mock.dispose() } } : mock
+  const progress = await ProgressStore.open(join(opts.dataDir, 'folders-progress.json'), { clock: opts.clock, logger })
+  hub.add(new FolderSource({ id: 'folders', name: 'Folders', roots: () => system.folders.roots(),
+    retry: (id) => system.folders.retry(id), store: progress, clock: opts.clock, logger: logger.child('folders'),
+    lister: linux ? new FindLister(new NodeCommandRunner(logger), logger) : new FsLister(logger) }))
+  const foldersChanged = system.folders.on('changed', () => hub.invalidate())
   const signin = opts.realSystem?.includes('sources')
     ? new RealSignInService({ hub, settings, secrets, logger: logger.child('signin'), clock: opts.clock,
       sourceLogger: (kind) => logger.child(kind), appVersion: opts.appVersion ?? '0.1.0', fetch: opts.fetch })
@@ -200,8 +210,9 @@ export async function composeCore(opts: ComposeOptions): Promise<{
     disposed = true
     try {
       await appIcons.dispose()
-      control?.commands.dispose(); await control?.server.close(); await player.dispose(); await apps.close(); await settings.flush()
+      control?.commands.dispose(); await control?.server.close(); await player.dispose(); await progress.flush()
+      await apps.close(); await settings.flush()
     }
-    finally { weather.dispose(); core.dispose(); signin.dispose(); system.dispose(); hub.dispose(); await logger.close() }
+    finally { foldersChanged(); weather.dispose(); core.dispose(); signin.dispose(); system.dispose(); hub.dispose(); await logger.close() }
   } }
 }

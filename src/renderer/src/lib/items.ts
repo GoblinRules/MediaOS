@@ -25,7 +25,9 @@ export function hasResume(item: MediaItem): boolean {
 }
 
 export function openDetails(item: MediaItem): void {
-  push({ name: 'details', key: item.key })
+  // A folder (in the Folders library) has no details page: it opens as a grid of what is inside it.
+  if (item.type === 'folder') push({ name: 'library', key: item.key, title: item.title })
+  else push({ name: 'details', key: item.key })
 }
 
 export async function play(item: MediaItem, resume = hasResume(item)): Promise<void> {
@@ -55,6 +57,15 @@ export async function setFavourite(item: MediaItem, favourite: boolean): Promise
 /** Options for one item (Menu key, or hold Select). */
 export function itemMenuItems(item: MediaItem): MenuItem[] {
   const items: MenuItem[] = []
+  if (item.type === 'folder') {
+    items.push({ id: 'open', label: 'Open', icon: 'folder', onSelect: () => openDetails(item) })
+    items.push(
+      item.favourite
+        ? { id: 'unfav', label: 'Remove from favourites', icon: 'heart', onSelect: () => void setFavourite(item, false) }
+        : { id: 'fav', label: 'Add to favourites', icon: 'heart', onSelect: () => void setFavourite(item, true) },
+    )
+    return items
+  }
   if (isPlayable(item)) {
     if (hasResume(item)) {
       items.push({ id: 'resume', label: 'Resume', icon: 'play', onSelect: () => void play(item, true) })

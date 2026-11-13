@@ -7,7 +7,7 @@ import { runtime, type Runtime } from '../core/runtime'
 import { silentLog, type Log } from '../log/Logger'
 
 export interface PlayerOptions { clock?: Runtime; logger?: Log; autoPlayNext?: () => boolean }
-export const playbackError = "This video couldn't be played. The file may be damaged or in a format the server can't convert."
+export const playbackError = "This video couldn't be played. The file may be damaged, or in a format that can't be played here."
 
 export abstract class PlayerBase implements PlayerController {
   protected value: PlayerState

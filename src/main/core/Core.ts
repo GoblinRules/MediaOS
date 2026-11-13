@@ -73,6 +73,7 @@ export class Core {
       }),
       this.system.network.onToast((t) => this.emit('toast', { id: randomUUID(), text: t.text, tone: t.tone })),
       this.system.bluetooth.on('changed', () => this.emit('system', { what: 'bluetooth' })),
+      this.system.folders.on('changed', () => this.emit('system', { what: 'folders' })),
       this.system.updates.on('changed', () => this.emit('system', { what: 'updates' })))
     this.handlers = this.makeHandlers()
     if (opts.overnightUpdates) this.updateScheduler = new UpdateScheduler({
@@ -184,6 +185,8 @@ export class Core {
       'home.refresh': async () => { this.hub.refresh(); return home() },
       'sources.list': async () => this.hub.list(),
       'sources.remove': async (id) => {
+        if (id === 'folders') throw new SourceError(
+          "Folders can't be removed. Remove each network folder in Settings › Libraries instead.", 'unsupported')
         this.settings.update({ sources: this.settings.get().sources.filter((s) => s.id !== id),
           ...(id === 'demo' ? { demoRemoved: true } : {}) })
         this.hub.remove(id)
@@ -193,6 +196,8 @@ export class Core {
       'sources.rename': async (id, name) => {
         const source = this.hub.get(id)
         if (!source) throw new SourceError("That library isn't connected any more.", 'notFound')
+        if (source.kind === 'folders') throw new SourceError(
+          "Folders can't be renamed. Each network folder keeps the name it was added with.", 'unsupported')
         const sources = this.settings.get().sources
         const old = sources.find((s) => s.id === id)
         if (!old && sources.length >= MAX_SOURCES) throw new SourceError(SOURCE_LIMIT_MESSAGE, 'unsupported')
@@ -257,6 +262,12 @@ export class Core {
         return value
       },
       'network.status': () => system.network.status(),
+      'folders.list': () => system.folders.list(),
+      'folders.discover': () => system.folders.discover(),
+      'folders.listShares': (login) => system.folders.listShares(login),
+      'folders.add': (req) => system.folders.add(req),
+      'folders.remove': (id) => system.folders.remove(id),
+      'folders.retry': (id) => system.folders.retry(id),
       'network.scan': () => system.network.scanWifi(),
       'network.connect': (ssid, psk) => system.network.connect(ssid, psk),
       'network.forget': (id) => system.network.forget(id),

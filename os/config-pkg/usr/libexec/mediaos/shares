@@ -1,0 +1,562 @@
+#!/usr/bin/python3 -I
+"""MediaOS network folders (SMB shares) and USB drives. Runs as root.
+
+  shares serve           One request per connection on /run/mediaos/shares.sock (mediaos-shares@.service, socket
+                         activated). The socket is mode 0660 for root and the mediaos group, and the caller must be
+                         root or the mediaos user. One JSON line in, one JSON line out.
+  shares mount-all       At boot (mediaos-shares-mount.service): mount every saved share.
+  shares usb-add NAME    From udev (mediaos-usb@NAME.service): mount a USB drive's filesystem read-only.
+  shares usb-remove NAME When the drive goes: unmount it.
+
+Requests ({"op": ...}) and replies ({"ok": true, ...} or {"ok": false, "error": word, "detail": text}):
+  list                                   -> shares: [{id, name, server, share, user, domain, guest, path, mounted,
+                                              error, errorAt}], drives: [{id, name, path, fs, sizeBytes}]
+  add {name, server, share, user, password, domain, guest, ip}
+                                         -> id. The share is mounted first and saved only if that works.
+  remove {id}                            -> unmounts the share and forgets it and its password.
+  mount {id}                             -> mounts it again (after a failure at boot, say).
+Error words: invalid, too-many, exists, not-found, unreachable, auth, no-share, failed, busy.
+
+Shares mount read-only at /media/mediaos/<id>, owned by the mediaos user, with nosuid, nodev and noexec. Each
+share's settings are in /var/lib/mediaos-shares/<id>.json and its password in <id>.cred, both root-only (0600).
+User text never reaches a shell or the mount option string: it goes in the credentials file or the UNC path, and
+every field is checked first. USB drives also mount read-only, so pulling one out never damages it.
+"""
+import concurrent.futures
+import fcntl
+import ipaddress
+import json
+import os
+import pwd
+import re
+import secrets
+import signal
+import socket
+import stat
+import struct
+import subprocess
+import sys
+import time
+
+STATE = "/var/lib/mediaos-shares"
+RUN = "/run/mediaos-shares"
+MEDIA = "/media/mediaos"
+MAX_SHARES = 20
+MAX_REQUEST = 64 * 1024
+MOUNT_TIMEOUT = 25
+USER = "mediaos"
+os.environ.update(PATH="/usr/sbin:/usr/bin:/sbin:/bin", LC_ALL="C", LANG="C")
+os.umask(0o077)
+
+SHARE_ID = re.compile(r"^smb-[a-f0-9]{8}$")
+HOST = re.compile(r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9_-]{0,62})(?:\.[A-Za-z0-9](?:[A-Za-z0-9_-]{0,62}))*\.?$")
+KNAME = re.compile(r"^sd[a-z]{1,2}[0-9]{0,3}$")
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+FS_TYPES = {"vfat": "vfat", "exfat": "exfat", "ntfs": "ntfs3", "ext2": "ext2", "ext3": "ext3", "ext4": "ext4"}
+
+
+class Refused(Exception):
+    def __init__(self, error, detail=""):
+        super().__init__(error)
+        self.error, self.detail = error, detail
+
+
+def now():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def write_private(path, text):
+    tmp = "%s.%s.tmp" % (path, secrets.token_hex(4))
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def remove_quietly(path):
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
+def tv_user():
+    entry = pwd.getpwnam(USER)
+    return entry.pw_uid, entry.pw_gid
+
+
+def prepare_dirs():
+    for path, mode in ((STATE, 0o700), (RUN, 0o700), (RUN + "/usb", 0o700), (MEDIA, 0o755)):
+        os.makedirs(path, mode=mode, exist_ok=True)
+        # Only when it's wrong: the shell watches MEDIA, and a chmod on every request reads as a change there, so each
+        # reload asked the helper again and the screens reloaded about once a second.
+        if stat.S_IMODE(os.stat(path).st_mode) != mode:
+            os.chmod(path, mode)
+
+
+def lock():
+    """Mutating operations run one at a time across connections and the boot and USB units."""
+    fd = os.open(RUN + "/lock", os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+# ---- Mount table -----------------------------------------------------------------------------------------------
+
+def mounted_paths():
+    paths = set()
+    with open("/proc/self/mountinfo", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            fields = line.split(" ")
+            if len(fields) > 4:
+                paths.add(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[4]))
+    return paths
+
+
+def unmount(path):
+    if path not in mounted_paths():
+        return
+    if subprocess.run(["umount", path], stdin=subprocess.DEVNULL, capture_output=True, timeout=30).returncode != 0:
+        # Busy (a file is open) or the server has gone: detach it now and let the kernel finish when it can.
+        subprocess.run(["umount", "-l", path], stdin=subprocess.DEVNULL, capture_output=True, timeout=30)
+
+
+def remove_mount_point(path):
+    try:
+        os.rmdir(path)
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        print("Couldn't remove %s: %s" % (path, error), file=sys.stderr)
+
+
+# ---- Checking requests -----------------------------------------------------------------------------------------
+
+def text_field(req, key, limit, required=False, allow_empty=True):
+    value = req.get(key, "")
+    if value is None:
+        value = ""
+    if not isinstance(value, str) or len(value) > limit or CONTROL.search(value):
+        raise Refused("invalid", key)
+    if (required or not allow_empty) and not value.strip():
+        raise Refused("invalid", key)
+    return value
+
+
+def server_field(req):
+    server = text_field(req, "server", 253, required=True).strip()
+    if server.startswith("\\\\") or server.startswith("//"):
+        server = server[2:]
+    try:
+        address = ipaddress.ip_address(server)
+    except ValueError:
+        address = None
+    if address is not None:
+        if address.version != 4:
+            raise Refused("invalid", "server")
+        return str(address)
+    if not HOST.match(server):
+        raise Refused("invalid", "server")
+    return server.rstrip(".").lower()
+
+
+def share_field(req):
+    share = text_field(req, "share", 80, required=True).strip().strip("/\\")
+    if not share or re.search(r"[/\\,%]", share) or share in (".", ".."):
+        raise Refused("invalid", "share")
+    return share
+
+
+def ip_field(req):
+    value = req.get("ip")
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise Refused("invalid", "ip")
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        raise Refused("invalid", "ip")
+    if address.version != 4:
+        raise Refused("invalid", "ip")
+    return str(address)
+
+
+def id_field(req):
+    value = req.get("id")
+    if not isinstance(value, str) or not SHARE_ID.match(value):
+        raise Refused("invalid", "id")
+    return value
+
+
+# ---- Saved shares ----------------------------------------------------------------------------------------------
+
+def config_path(share_id):
+    return "%s/%s.json" % (STATE, share_id)
+
+
+def cred_path(share_id):
+    return "%s/%s.cred" % (STATE, share_id)
+
+
+def error_path(share_id):
+    return "%s/%s.error" % (RUN, share_id)
+
+
+def load_shares():
+    shares = []
+    for name in sorted(os.listdir(STATE)):
+        if not name.endswith(".json") or not SHARE_ID.match(name[:-5]):
+            continue
+        try:
+            with open(config_path(name[:-5]), encoding="utf-8") as f:
+                cfg = json.load(f)
+        except (OSError, ValueError) as error:
+            print("Skipping %s: %s" % (name, error), file=sys.stderr)
+            continue
+        if isinstance(cfg, dict) and cfg.get("id") == name[:-5]:
+            shares.append(cfg)
+    return shares
+
+
+def find_share(share_id):
+    for cfg in load_shares():
+        if cfg["id"] == share_id:
+            return cfg
+    raise Refused("not-found")
+
+
+def record_error(share_id, error, detail):
+    if error:
+        write_private(error_path(share_id), json.dumps({"error": error, "detail": detail, "at": now()}))
+    else:
+        remove_quietly(error_path(share_id))
+
+
+def last_error(share_id):
+    try:
+        with open(error_path(share_id), encoding="utf-8") as f:
+            value = json.load(f)
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+# ---- Mounting a share ------------------------------------------------------------------------------------------
+
+def resolve(server):
+    try:
+        ipaddress.ip_address(server)
+        return server
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(server, 445, socket.AF_INET, socket.SOCK_STREAM)
+    except (socket.gaierror, UnicodeError):
+        return None
+    return infos[0][4][0] if infos else None
+
+
+def classify(stderr):
+    code = re.search(r"mount error\((\d+)\)", stderr)
+    number = int(code.group(1)) if code else None
+    if number in (13, 1, 126):
+        return "auth"
+    if number in (2, 6, 19):
+        return "no-share"
+    if number in (101, 110, 111, 112, 113, 115, 104, 103) or "could not resolve" in stderr.lower():
+        return "unreachable"
+    return "failed"
+
+
+def mount_share(cfg, ip_hint=None):
+    """Mounts one saved (or about to be saved) share. Returns (error word or None, detail)."""
+    path = "%s/%s" % (MEDIA, cfg["id"])
+    if path in mounted_paths():
+        return None, ""
+    os.makedirs(path, mode=0o755, exist_ok=True)
+    uid, gid = tv_user()
+    address = resolve(cfg["server"]) or ip_hint or cfg.get("ip")
+    if not address:
+        return "unreachable", "The name %s didn't resolve" % cfg["server"]
+    options = ["ro", "nosuid", "nodev", "noexec", "soft", "echo_interval=10", "uid=%d" % uid, "gid=%d" % gid,
+               "forceuid", "forcegid", "file_mode=0444", "dir_mode=0555", "iocharset=utf8", "ip=" + address]
+    if cfg.get("guest"):
+        options += ["guest", "username=guest"]
+    else:
+        options.append("credentials=" + cred_path(cfg["id"]))
+    unc = "//%s/%s" % (cfg["server"], cfg["share"])
+    try:
+        done = subprocess.run(["mount", "-t", "cifs", unc, path, "-o", ",".join(options)],
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=MOUNT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        unmount(path)
+        return "unreachable", "The mount took longer than %d seconds" % MOUNT_TIMEOUT
+    if done.returncode == 0:
+        return None, ""
+    # mount.cifs prints "mount error(13): Permission denied" and then a line pointing at its manual page.
+    output = ((done.stderr or "") + "\n" + (done.stdout or "")).strip()
+    lines = [line for line in output.splitlines() if "mount error" in line] or output.splitlines()
+    detail = lines[0][:200] if lines else "mount exited with %d" % done.returncode
+    return classify(output), detail
+
+
+def write_credentials(share_id, user, password, domain):
+    lines = ["username=" + user, "password=" + password]
+    if domain:
+        lines.append("domain=" + domain)
+    write_private(cred_path(share_id), "\n".join(lines) + "\n")
+
+
+# ---- Requests ----------------------------------------------------------------------------------------------------
+
+def op_list(_req):
+    mounted = mounted_paths()
+    shares = []
+    for cfg in load_shares():
+        path = "%s/%s" % (MEDIA, cfg["id"])
+        err = last_error(cfg["id"]) if path not in mounted else {}
+        shares.append({
+            "id": cfg["id"], "name": cfg.get("name") or cfg["share"], "server": cfg["server"], "share": cfg["share"],
+            "user": "" if cfg.get("guest") else cfg.get("user", ""), "domain": cfg.get("domain", ""),
+            "guest": bool(cfg.get("guest")), "path": path, "mounted": path in mounted,
+            "error": err.get("error"), "errorAt": err.get("at"),
+        })
+    return {"shares": shares, "drives": usb_drives(mounted)}
+
+
+def op_add(req):
+    name = text_field(req, "name", 60).strip()
+    server = server_field(req)
+    share = share_field(req)
+    guest = req.get("guest") is True
+    user = "" if guest else text_field(req, "user", 256, required=True).strip()
+    password = "" if guest else text_field(req, "password", 256)
+    domain = "" if guest else text_field(req, "domain", 64).strip()
+    # "@" is allowed: a Windows PC signed in with a Microsoft account shares as that account's email address.
+    if not guest and not re.match(r"^[^\\/]+$", user):
+        raise Refused("invalid", "user")
+    if domain and not re.match(r"^[A-Za-z0-9._-]+$", domain):
+        raise Refused("invalid", "domain")
+    ip = ip_field(req)
+    fd = lock()
+    try:
+        shares = load_shares()
+        if len(shares) >= MAX_SHARES:
+            raise Refused("too-many")
+        for cfg in shares:
+            if cfg["server"].lower() == server.lower() and cfg["share"].lower() == share.lower():
+                raise Refused("exists", cfg["id"])
+        share_id = "smb-" + secrets.token_hex(4)
+        while os.path.exists(config_path(share_id)):
+            share_id = "smb-" + secrets.token_hex(4)
+        cfg = {"id": share_id, "name": name or share, "server": server, "share": share, "user": user,
+               "domain": domain, "guest": guest, "ip": ip or resolve(server), "addedAt": now()}
+        if not guest:
+            write_credentials(share_id, user, password, domain)
+        error, detail = mount_share(cfg, ip)
+        if error:
+            remove_quietly(cred_path(share_id))
+            remove_mount_point("%s/%s" % (MEDIA, share_id))
+            raise Refused(error, detail)
+        write_private(config_path(share_id), json.dumps(cfg, indent=1) + "\n")
+        record_error(share_id, None, "")
+        return {"id": share_id, "path": "%s/%s" % (MEDIA, share_id)}
+    finally:
+        os.close(fd)
+
+
+def op_remove(req):
+    share_id = id_field(req)
+    fd = lock()
+    try:
+        find_share(share_id)
+        path = "%s/%s" % (MEDIA, share_id)
+        unmount(path)
+        remove_quietly(config_path(share_id))
+        remove_quietly(cred_path(share_id))
+        remove_quietly(error_path(share_id))
+        remove_mount_point(path)
+        return {}
+    finally:
+        os.close(fd)
+
+
+def op_mount(req):
+    share_id = id_field(req)
+    fd = lock()
+    try:
+        cfg = find_share(share_id)
+        error, detail = mount_share(cfg)
+        record_error(share_id, error, detail)
+        if error:
+            raise Refused(error, detail)
+        return {"path": "%s/%s" % (MEDIA, share_id)}
+    finally:
+        os.close(fd)
+
+
+OPS = {"list": op_list, "add": op_add, "remove": op_remove, "mount": op_mount}
+
+
+def peer_allowed():
+    sock = socket.socket(fileno=os.dup(0))
+    try:
+        creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+    finally:
+        sock.close()
+    _pid, uid, _gid = struct.unpack("3i", creds)
+    return uid in (0, tv_user()[0])
+
+
+def serve():
+    signal.alarm(120)
+    if not peer_allowed():
+        reply = {"ok": False, "error": "invalid", "detail": "caller"}
+    else:
+        line = sys.stdin.buffer.readline(MAX_REQUEST + 1)
+        try:
+            if len(line) > MAX_REQUEST or not line.endswith(b"\n"):
+                raise Refused("invalid", "request")
+            try:
+                req = json.loads(line.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                raise Refused("invalid", "request")
+            if not isinstance(req, dict) or req.get("op") not in OPS:
+                raise Refused("invalid", "op")
+            prepare_dirs()
+            reply = {"ok": True}
+            reply.update(OPS[req["op"]](req))
+        except Refused as refused:
+            reply = {"ok": False, "error": refused.error, "detail": refused.detail}
+        except Exception as error:  # Anything unexpected: say so rather than drop the connection.
+            print("shares: %r" % (error,), file=sys.stderr)
+            reply = {"ok": False, "error": "failed", "detail": type(error).__name__}
+    sys.stdout.write(json.dumps(reply) + "\n")
+    sys.stdout.flush()
+
+
+def mount_all():
+    prepare_dirs()
+    fd = lock()
+    try:
+        shares = load_shares()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(mount_share, shares))
+        for cfg, (error, detail) in zip(shares, results):
+            record_error(cfg["id"], error, detail)
+            print("%s: %s" % (cfg["id"], error or "mounted"), file=sys.stderr)
+    finally:
+        os.close(fd)
+
+
+# ---- USB drives --------------------------------------------------------------------------------------------------
+
+def usb_info_path(kname):
+    return "%s/usb/%s.json" % (RUN, kname)
+
+
+def usb_drives(mounted):
+    drives = []
+    for name in sorted(os.listdir(RUN + "/usb")):
+        if not name.endswith(".json") or not KNAME.match(name[:-5]):
+            continue
+        try:
+            with open("%s/usb/%s" % (RUN, name), encoding="utf-8") as f:
+                info = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(info, dict) and info.get("path") in mounted:
+            drives.append({key: info.get(key) for key in ("id", "name", "path", "fs", "sizeBytes")})
+    return drives
+
+
+def probe(device):
+    done = subprocess.run(["blkid", "-p", "-o", "export", device], stdin=subprocess.DEVNULL, capture_output=True,
+                          text=True, timeout=30)
+    values = {}
+    for line in done.stdout.splitlines():
+        key, sep, value = line.partition("=")
+        if sep:
+            values[key] = value
+    return values
+
+
+def usb_add(kname):
+    if not KNAME.match(kname):
+        raise SystemExit("Not a USB disk name: %r" % kname)
+    prepare_dirs()
+    device = "/dev/" + kname
+    values = probe(device)
+    fs = FS_TYPES.get(values.get("TYPE", ""))
+    if not fs:
+        print("%s: %s isn't a filesystem MediaOS reads" % (kname, values.get("TYPE", "unknown")), file=sys.stderr)
+        return
+    uid, gid = tv_user()
+    options = ["ro", "nosuid", "nodev", "noexec"]
+    if fs in ("vfat", "exfat", "ntfs3"):
+        options += ["uid=%d" % uid, "gid=%d" % gid, "fmask=0133", "dmask=0022", "iocharset=utf8"]
+    path = "%s/usb-%s" % (MEDIA, kname)
+    fd = lock()
+    try:
+        os.makedirs(path, mode=0o755, exist_ok=True)
+        if path not in mounted_paths():
+            done = subprocess.run(["mount", "-t", fs, "-o", ",".join(options), device, path],
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+            if done.returncode != 0:
+                remove_mount_point(path)
+                raise SystemExit("%s: mount failed: %s" % (kname, done.stderr.strip()[:300]))
+        uuid = re.sub(r"[^a-z0-9-]", "", values.get("UUID", "").lower())[:40]
+        label = CONTROL.sub("", values.get("LABEL", ""))[:60].strip()
+        try:
+            with open("/sys/class/block/%s/size" % kname, encoding="ascii") as f:
+                size = int(f.read().strip()) * 512
+        except (OSError, ValueError):
+            size = None
+        info = {"id": "usb-" + (uuid or kname), "name": label or "USB drive", "path": path, "fs": fs,
+                "sizeBytes": size, "device": device}
+        write_private(usb_info_path(kname), json.dumps(info) + "\n")
+    finally:
+        os.close(fd)
+
+
+def usb_remove(kname):
+    if not KNAME.match(kname):
+        raise SystemExit("Not a USB disk name: %r" % kname)
+    prepare_dirs()
+    path = "%s/usb-%s" % (MEDIA, kname)
+    fd = lock()
+    try:
+        remove_quietly(usb_info_path(kname))
+        unmount(path)
+        remove_mount_point(path)
+    finally:
+        os.close(fd)
+
+
+def main(argv):
+    if os.geteuid() != 0:
+        raise SystemExit("shares must run as root")
+    if argv[1:] == ["serve"]:
+        serve()
+    elif argv[1:] == ["mount-all"]:
+        mount_all()
+    elif len(argv) == 3 and argv[1] == "usb-add":
+        usb_add(argv[2])
+    elif len(argv) == 3 and argv[1] == "usb-remove":
+        usb_remove(argv[2])
+    else:
+        raise SystemExit("usage: shares serve|mount-all|usb-add NAME|usb-remove NAME")
+
+
+if __name__ == "__main__":
+    main(sys.argv)

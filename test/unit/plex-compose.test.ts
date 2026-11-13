@@ -20,7 +20,7 @@ describe('Plex composition', () => {
     try {
       const list = await handleCall(composed.core, 'sources.list', [])
       expect(list).toMatchObject({ ok: true, value: [{ id: 'saved', kind: 'plex', status: 'ok' },
-        { id: 'missing', status: 'signed-out' }] })
+        { id: 'missing', status: 'signed-out' }, { id: 'folders', status: 'ok' }] })
       expect((await handleCall(composed.core, 'libraries.list', [])).ok).toBe(true)
       expect(fake.calls.length).toBeGreaterThan(0)
       expect(fake.calls.every((c) => c.headers.get('X-Plex-Client-Identifier') === 'stable-device')).toBe(true)

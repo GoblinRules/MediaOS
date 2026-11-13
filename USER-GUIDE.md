@@ -66,6 +66,9 @@ Nothing is erased.
 MediaOS plays films and shows from your own **Jellyfin** or **Plex** server. You can add as many servers as
 you like, and mix the two. Add them in **Settings › Libraries**, or during the welcome steps.
 
+No server? MediaOS can also play films straight from a **shared folder** on a computer or NAS, or from a
+**USB drive** (see [Network folders and USB drives](#network-folders-and-usb-drives) below).
+
 ![Settings › Libraries](assets/screenshots/settings-libraries.png)
 
 ### Jellyfin
@@ -96,11 +99,35 @@ you like, and mix the two. Add them in **Settings › Libraries**, or during the
 
 ### Changing or removing a library
 
-In **Settings › Libraries**, choose a library under **Your libraries** to get:
+In **Settings › Libraries**, choose a server under **Your servers** to get:
 
 - **Rename**: the name shown on the TV.
 - **Sign in again** (Jellyfin) or **Sign in to Plex again**: use this if the box says it has been signed out.
 - **Remove**: takes the library off this TV. Nothing is deleted from your server.
+
+### Network folders and USB drives
+
+Films kept in a shared folder on a Windows PC, a Mac or a NAS can play without Jellyfin or Plex. They appear
+together in a library called **Folders**, one row for each folder or drive.
+
+1. In **Settings › Libraries**, choose **Add a network folder**.
+2. Computers on your home network appear by themselves. Choose yours. If it isn't listed, choose **Type the
+   computer's name** and type its name or address, for example `NAS`, `192.168.1.20`, or the whole path such as
+   `\\NAS\Films`.
+3. Say how to get in:
+   - **Type a user name and password**: the ones you use on that computer. On a Windows PC this is often the
+     email address you sign in to Windows with.
+   - **Open it as a guest**, for folders shared with everyone.
+4. Choose the shared folder that has your films (or **Type the folder name** if it isn't listed).
+
+MediaOS only ever *reads* these folders: it never changes or deletes anything on your computer. The password is
+kept on the box only, where the TV apps can't read it.
+
+**USB drives** need no setup: plug one in and it appears in Folders a few seconds later. Unplug it to remove it.
+
+Films play with resume, and a subtitle file next to a film (for example `Film.en.srt` beside `Film.mkv`) is
+picked up by itself. To take a network folder off this TV, choose it under **Network folders and USB drives**
+and then **Remove**. If a computer was switched off, choose **Try again** once it's back on.
 
 ## 4. Watching films and shows
 
@@ -300,6 +327,7 @@ Until then, if you need a VPN, set it up on your router.
 |---|---|
 | "Can't reach" a server | Check the server is switched on and on the same network. In Settings › Libraries, choose the library and **Sign in again**. |
 | A library says you're signed out | Settings › Libraries › choose it › **Sign in again**. |
+| A network folder says it can't be reached | Check the computer is switched on and awake, then Settings › Libraries › choose the folder › **Try again**. If its password changed, remove the folder and add it again. |
 | Films stutter or buffer | Use a network cable if you can. Or turn off **Play the original file when possible** in Settings › Playback, so your server sends a lighter version. |
 | No picture on a 4K TV, or the wrong size | Settings › Display › **Picture size**. |
 | No sound | Settings › Sound › **Play sound through**, then **Play a test sound**. |

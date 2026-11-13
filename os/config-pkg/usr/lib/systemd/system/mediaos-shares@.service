@@ -1,0 +1,12 @@
+[Unit]
+Description=MediaOS network folders helper
+CollectMode=inactive-or-failed
+
+[Service]
+# No sandboxing options on purpose: ProtectSystem, PrivateTmp and the like give the service its own mount namespace,
+# and a share mounted there would be invisible to the home screen.
+ExecStart=/usr/libexec/mediaos/shares serve
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeMaxSec=150

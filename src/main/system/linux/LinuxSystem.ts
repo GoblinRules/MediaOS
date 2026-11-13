@@ -9,6 +9,7 @@ import { silentLog, type Log } from '../../log/Logger'
 import { UserFacingError } from '../net/texts'
 import { NodeCommandRunner, type CommandRunner } from './CommandRunner'
 import { createLinuxBluetooth } from './LinuxBluetooth'
+import { createLinuxFolders } from './LinuxFolders'
 import { createLinuxCec, type CecFs } from './LinuxCec'
 import { createLinuxUpdates, type UpdateFs } from './LinuxUpdates'
 import type { Runtime } from '../../core/runtime'
@@ -94,7 +95,9 @@ export function createLinuxSystem(opts: LinuxSystemOptions): LinuxSystem {
   const cec = createLinuxCec({ runner, logger, timers: opts.timers,
     fs: { readdir: (path) => io.readdir(path), readFile: (path, encoding) => io.readFile(path, encoding),
       stat: (path) => io.stat ? io.stat(path) : Promise.reject(new Error('EDID file sizes are unavailable')) } })
+  const folders = createLinuxFolders({ runner, logger, timers: opts.timers, fetch: opts.fetch })
   const system: LinuxSystem = {
+    folders,
     audio: {
       outputs,
       setOutput: async (id) => {
@@ -195,7 +198,7 @@ export function createLinuxSystem(opts: LinuxSystemOptions): LinuxSystem {
         }
       },
     },
-    dispose: () => { disposed = true; bluetooth.dispose(); cec.dispose(); updates.dispose() },
+    dispose: () => { disposed = true; folders.dispose(); bluetooth.dispose(); cec.dispose(); updates.dispose() },
   }
   return system
 }

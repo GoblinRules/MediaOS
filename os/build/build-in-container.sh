@@ -64,7 +64,8 @@ cp -a os/config-pkg "$root"
 find "$root" -type d -exec chmod 0755 {} +
 find "$root" -type f -exec chmod 0644 {} +
 chmod 0755 "$root/DEBIAN/postinst" "$root/usr/bin/mediaos-ctl" "$root/usr/libexec/mediaos/session" \
-  "$root/usr/libexec/mediaos/net-handover" "$root/usr/libexec/mediaos/update"
+  "$root/usr/libexec/mediaos/net-handover" "$root/usr/libexec/mediaos/update" \
+  "$root/usr/libexec/mediaos/shares"
 # The MediaOS update server, only when this build is given one (MEDIAOS_UPDATE_URL and its public signing key at
 # /work/update-key.asc). Without them the box says updates aren't set up.
 # No DEBIAN/conffiles on purpose: MediaOS owns every /etc file it ships, so each install, update or go-back writes

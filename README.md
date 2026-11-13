@@ -30,6 +30,9 @@ command line to deal with.
 - **Your own films and shows.** Add a Jellyfin server (found on your network for you) or a Plex account (sign
   in with a code on your phone). Continue watching, Next up and Recently added appear on Home, with sort and
   filter in every library.
+- **Network folders and USB drives.** No server needed: play films straight from a shared folder on a PC,
+  Mac or NAS (computers on your network are found for you), or from a USB drive you plug in. MediaOS only
+  reads them, never changes them.
 - **Proper playback.** Films play in mpv with your choice of audio track and subtitles, skip back and forward,
   resume where you left off, and the next episode plays automatically.
 - **Streaming apps.** YouTube (TV layout), Netflix, BBC iPlayer, ITVX, Channel 4, My5, Disney+, Prime Video
@@ -115,7 +118,8 @@ These parts are not finished yet, or have only been tested in a virtual machine:
   another HDMI input instead.
 - **VPN per app**, for example BBC iPlayer through a UK VPN while everything else connects directly. This is
   designed but **not built yet**.
-- **Ideas being considered:** playing files from network folders (SMB shares) and USB drives.
+- **Network folders and USB drives** are new. They have been tested in a virtual machine with a Samba share and
+  simulated FAT and ext4 drives, but not yet with many real NAS boxes, Windows PCs or USB sticks.
 
 **Not planned:** live TV and recording, games, a general desktop, Android apps, Dolby Vision, TrueHD or DTS-HD
 passthrough, and 4K or HDR from paid streaming services. MediaOS never works around copy protection.

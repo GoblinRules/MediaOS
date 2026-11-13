@@ -10,6 +10,8 @@ import { focusedItem, openItemMenu } from '../lib/items'
 
 export type TileShape = 'poster' | 'landscape'
 
+const FALLBACK_ICON: Partial<Record<MediaItem['type'], string>> = { movie: 'film', video: 'film', folder: 'folder' }
+
 /** Artwork that falls back to a coloured title card when the server has none or it fails to load. */
 export function Art(p: { item: MediaItem; kind: 'poster' | 'backdrop' | 'thumb'; w: number; h: number; className?: string }): ReactNode {
   const [failed, setFailed] = useState<string>()
@@ -17,7 +19,7 @@ export function Art(p: { item: MediaItem; kind: 'poster' | 'backdrop' | 'thumb';
   if (!src || failed === src) {
     return (
       <div className={cx('art art-fallback', p.className)} style={{ background: fallbackColour(p.item.title) }}>
-        <Icon name={p.item.type === 'movie' ? 'film' : 'tv'} size="2.4rem" />
+        <Icon name={FALLBACK_ICON[p.item.type] ?? 'tv'} size="2.4rem" />
         <span>{p.item.seriesTitle && p.item.type === 'episode' ? p.item.seriesTitle : p.item.title}</span>
       </div>
     )

@@ -63,8 +63,9 @@ export class MediaHub {
     recordTimeout = true): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {
-      timer = this.clock.setTimeout(() => reject(new SourceError(
-        `Can't reach ${this.entries.get(source.id)?.name ?? source.name}. Check the server is switched on.`, 'timeout')), ms)
+      timer = this.clock.setTimeout(() => reject(new SourceError(source.kind === 'folders'
+        ? 'Your folders are taking a long time to open. Try again in a moment.'
+        : `Can't reach ${this.entries.get(source.id)?.name ?? source.name}. Check the server is switched on.`, 'timeout')), ms)
     })
     try {
       const result = await Promise.race([Promise.resolve().then(fn), timeout])
@@ -110,7 +111,10 @@ export class MediaHub {
           id: `lib:${lib.key}`,
           title: entries.length > 1 ? `${lib.title} · ${this.entries.get(source.id)?.name ?? source.name}` : lib.title,
           kind: 'library', libraryKey: lib.key,
-          items: (await source.browse(lib.id, { sort: 'added', descending: true, offset: 0, limit: 20 })).items,
+          items: (await source.browse(lib.id, { sort: 'added', descending: true, offset: 0, limit: 20 }).catch(() => {
+            this.logger.warn('Home library row unavailable', source.id, lib.id)
+            return { items: [] }
+          })).items,
         }))) : []
       return { rows, libraryRows }
     }, this.opts.homeTimeoutMs ?? this.opts.timeoutMs ?? 8000).catch(() => undefined)))

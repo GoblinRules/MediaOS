@@ -114,7 +114,8 @@ function LibrariesStep(p: {
   onNext: () => void
 }): ReactNode {
   const list = useCall('sources.list', [])
-  const added = list.data ?? []
+  // The Folders library is built in, so it isn't something the user added here.
+  const added = (list.data ?? []).filter((s) => s.kind !== 'folders')
 
   if (p.adding) {
     return (
@@ -142,8 +143,8 @@ function LibrariesStep(p: {
     <FocusGroup focusKey="setup:libraries" className="setup-step setup-centre">
       <h1 className="setup-title">Add your films and shows</h1>
       <p className="setup-text">
-        MediaOS plays from your own Jellyfin or Plex server. You can add more later in Settings › Libraries. Streaming apps like Netflix
-        and BBC iPlayer work without a server.
+        MediaOS plays from your own Jellyfin or Plex server. You can add more, and network folders, later in
+        Settings › Libraries. Streaming apps like Netflix and BBC iPlayer work without a server.
       </p>
       {added.length > 0 && (
         <ul className="setup-added" data-testid="setup-added">

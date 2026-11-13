@@ -4,9 +4,24 @@ import type {
   UpdateInfo, WifiAp,
 } from '@shared/system-types'
 
+import type { FolderAddResult, FolderList, FoundComputer, ShareAdd, ShareLogin } from '@shared/folder-types'
+
 export type Unsub = () => void
+export interface FolderRoot {
+  id: string; name: string; kind: 'share' | 'usb'; path: string; available: boolean; server?: string
+}
 
 export interface SystemServices {
+  folders: {
+    list(): Promise<FolderList>
+    roots(): Promise<FolderRoot[]>
+    discover(): Promise<FoundComputer[]>
+    listShares(login: ShareLogin): Promise<string[]>
+    add(req: ShareAdd): Promise<FolderAddResult>
+    remove(id: string): Promise<Result>
+    retry(id: string): Promise<Result>
+    on(ev: 'changed', cb: () => void): Unsub
+  }
   network: {
     status(): Promise<NetStatus>
     scanWifi(): Promise<WifiAp[]>

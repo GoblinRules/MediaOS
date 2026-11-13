@@ -60,7 +60,13 @@ describe('core composition and IPC', () => {
       const plex = await core.signin.plexPin()
       await core.signin.poll(plex.flowId); await core.signin.poll(plex.flowId); await core.signin.poll(plex.flowId)
       await core.system.bluetooth.startScan()
+      const removeFolder = await core.system.folders.add({ server: 'nas', share: 'Remove', guest: true })
+      const retryFolder = await core.system.folders.add({ server: 'nas', share: 'Retry', guest: true })
+      if (!removeFolder.ok || !retryFolder.ok) throw new Error('Mock folders were not created')
       const args: Record<CallName, unknown[]> = {
+        'folders.list': [], 'folders.discover': [], 'folders.listShares': [{ server: 'nas', guest: true }],
+        'folders.add': [{ server: 'nas', share: 'Films', guest: true }],
+        'folders.remove': [removeFolder.id], 'folders.retry': [retryFolder.id],
         'home.get': [], 'home.refresh': [], 'sources.list': [], 'sources.remove': ['remove-me'], 'sources.rename': ['demo', 'Our TV'],
         'libraries.list': [], 'libraries.browse': [library, { sort: 'title', offset: 0, limit: 20 }],
         'items.get': [key], 'items.children': [key], 'items.setWatched': [key, true], 'items.setFavourite': [key, true],

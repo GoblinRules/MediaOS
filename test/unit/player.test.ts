@@ -92,7 +92,7 @@ describe('PlaybackSession and MockPlayer', () => {
       expect(player.state().subtitleTracks.some((t) => t.selected)).toBe(false)
       await player.command({ kind: 'togglePause' }); await vi.advanceTimersByTimeAsync(1125)
       await player.stop()
-      expect(reports.at(-1)).toEqual({ state: 'stopped', positionSec: 41.125 })
+      expect(reports.at(-1)).toEqual({ state: 'stopped', positionSec: 41.125, durationSec: plan.durationSec })
       expect(reports.filter((r) => r.state === 'start')).toHaveLength(1)
     } finally { await player.dispose(); source.dispose() }
     expect(vi.getTimerCount()).toBe(0)
@@ -127,7 +127,7 @@ describe('PlaybackSession and MockPlayer', () => {
       expect(fallback).toHaveBeenCalledTimes(1); expect(load).toHaveBeenCalledTimes(1)
       session.playing(); await vi.advanceTimersByTimeAsync(10_000)
       session.update(55); session.paused(); await session.stop()
-      expect(source.report).toHaveBeenLastCalledWith(plan.report, { state: 'stopped', positionSec: 55 })
+      expect(source.report).toHaveBeenLastCalledWith(plan.report, { state: 'stopped', positionSec: 55, durationSec: plan.durationSec })
       expect(await session.end('error')).toBe('ended'); expect(fallback).toHaveBeenCalledTimes(1)
     } finally { await session.dispose() }
   })
@@ -158,7 +158,7 @@ describe('MpvController with a real JSON IPC socket', () => {
       await player.command({ kind: 'togglePause' }); await until(() => player.state().status === 'playing')
       await vi.advanceTimersByTimeAsync(20_000)
       expect(reports.filter((e) => e.state === 'progress')).toHaveLength(2)
-      await player.stop(); expect(reports.at(-1)).toEqual({ state: 'stopped', positionSec: 45 })
+      await player.stop(); expect(reports.at(-1)).toEqual({ state: 'stopped', positionSec: 45, durationSec: 120 })
       expect(player.state().status).toBe('idle')
     } finally { await player.dispose(); await server.dispose() }
     expect(vi.getTimerCount()).toBe(0)
@@ -196,7 +196,7 @@ describe('MpvController with a real JSON IPC socket', () => {
       expect(player.state().durationSec).toBe(3600)
       await player.command({ kind: 'seekTo', seconds: 900 }); await until(() => player.state().positionSec === 900)
       expect(server.commands.find((c) => c.command[0] === 'seek')?.command[1]).toBe(300)
-      await player.stop(); expect(reports.at(-1)).toEqual({ state: 'stopped', positionSec: 900 })
+      await player.stop(); expect(reports.at(-1)).toEqual({ state: 'stopped', positionSec: 900, durationSec: 3600 })
     } finally { await player.dispose(); await server.dispose() }
   })
   it('throttles position-only changes to four events a second and handles buffering', async () => {

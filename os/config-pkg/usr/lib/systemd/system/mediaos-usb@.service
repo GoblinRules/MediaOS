@@ -1,0 +1,12 @@
+[Unit]
+Description=MediaOS USB drive %I
+BindsTo=dev-%i.device
+After=dev-%i.device
+
+[Service]
+# Mounted read-only at /media/mediaos/usb-%I, so pulling the drive out never damages it.
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/mediaos/shares usb-add %I
+ExecStop=/usr/libexec/mediaos/shares usb-remove %I
+TimeoutStartSec=90
