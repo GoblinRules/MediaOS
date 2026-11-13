@@ -7,6 +7,8 @@ if [ "$1" = "configure" ]; then
   systemctl enable greetd.service
   # Enable for the next boot only: starting it or restarting NetworkManager here would drop SSH.
   systemctl enable mediaos-net-handover.service
+  # Runs at boot only when an update was cut short by a power cut (see /usr/libexec/mediaos/update repair).
+  systemctl enable mediaos-update-repair.service
   systemctl set-default graphical.target
   # TV-remote (HDMI-CEC) button remap and the Pulse-Eight adapter rule. Both apply when a device is next plugged
   # in (or at the next boot); inside the installer udev isn't running, which is fine.

@@ -25,6 +25,7 @@ export function Screensaver(): ReactNode {
   useEffect(() => {
     let last = Date.now()
     let saver = false
+    let reportedIdle = false
     let off = false
     const resetIdle = (): void => {
       last = Date.now()
@@ -32,8 +33,8 @@ export function Screensaver(): ReactNode {
       if (saver) {
         saver = false
         setIdle(false)
-        reportIdle(false)
       }
+      if (reportedIdle) { reportedIdle = false; reportIdle(false) }
     }
     // While a video or app is in front, core's key routing wakes the screen instead.
     let pointer: { x: number; y: number } | undefined
@@ -62,8 +63,8 @@ export function Screensaver(): ReactNode {
       if (!saver && saverMin > 0 && idleMs >= saverMin * 60_000) {
         saver = true
         setIdle(true)
-        reportIdle(true)
       }
+      if (!reportedIdle && (saver || idleMs >= 30 * 60_000)) { reportedIdle = true; reportIdle(true) }
       if (!off && offMin > 0 && idleMs >= offMin * 60_000) {
         off = true
         void turnScreenOff({ quiet: true })

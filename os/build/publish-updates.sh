@@ -5,6 +5,7 @@
 # fingerprint), and GNUPGHOME may point at the key's own gpg folder. Boxes trust only the matching public key, which
 # the build puts on them (see build-in-container.sh).
 # Older versions stay in the folder; boxes pick the newest. To withdraw a bad release, publish a newer one.
+# For a GitHub release (release-github.sh) pass a fresh, empty folder, so each release holds just its own version.
 set -eu
 
 [ $# -eq 3 ] || { echo "usage: publish-updates.sh <server folder> <mediaos-shell .deb> <mediaos-config .deb>" >&2; exit 2; }

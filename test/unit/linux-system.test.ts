@@ -45,6 +45,7 @@ function make(overrides: Partial<LinuxSystemOptions> = {}) {
   const runner = new FakeRunner()
   const io: NonNullable<LinuxSystemOptions['fs']> = {
     ...fs,
+    access: vi.fn(async () => { throw Object.assign(new Error('absent'), { code: 'ENOENT' }) }),
     readFile: vi.fn(async () => 'NAME=Debian\nPRETTY_NAME="Debian GNU/Linux 13 (trixie)"\n'),
     readdir: vi.fn(async () => [] as string[]),
     writeFile: vi.fn(async () => {}), mkdir: vi.fn(async () => undefined), rm: vi.fn(async () => {}),
@@ -238,10 +239,10 @@ describe('Linux services without invented hardware', () => {
     expect(await system.cec.wakeTv()).toEqual(error)
     expect(await system.cec.standbyTv()).toEqual(error)
     expect(await system.cec.setActiveSource()).toEqual({ ok: true })
-    await expect(system.updates.check()).rejects.toThrow("Updates aren't set up yet. This box has MediaOS 2.3.4.")
+    await expect(system.updates.check()).rejects.toThrow("Updates aren't set up on this box. It has MediaOS 2.3.4.")
     await expect(system.updates.check()).rejects.toBeInstanceOf(UserFacingError)
     expect(await system.updates.apply()).toEqual({ ok: false,
-      error: "Updates aren't set up yet. This box has MediaOS 2.3.4." })
+      error: "Updates aren't set up on this box. It has MediaOS 2.3.4." })
     system.dispose()
   })
   it('runs real power commands and returns plain failure messages', async () => {

@@ -124,11 +124,21 @@ export interface TimeInfo {
   ntp: boolean
 }
 
+export type UpdateAction = 'check' | 'apply' | 'auto' | 'rollback'
 export interface UpdateInfo {
+  /** False on boxes built without an update server. */
+  configured: boolean
+  /** The installed MediaOS version. */
   current: string
   available?: string
+  previous?: string
+  /** Overnight updates leave this version alone after the owner goes back. */
+  skipped?: string
+  checkedAt?: string
+  /** Plain text, at most 1500 characters. */
   notes?: string
-  checkedAt: string
+  running?: UpdateAction
+  lastRun?: { action: UpdateAction; ok: boolean; at: string; error?: string }
 }
 
 export interface SysInfo {

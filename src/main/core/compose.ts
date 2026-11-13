@@ -135,7 +135,7 @@ export async function composeCore(opts: ComposeOptions): Promise<{
     ? createLinuxNetwork({ logger: logger.child('network'), journal: join(opts.dataDir, 'net-trial.json'),
       clock: opts.clock, trialSec: opts.netTrialSec }) : undefined
   const linuxSystem = linux ? createLinuxSystem({ logger: logger.child('system'), logDir: opts.logDir,
-    clock: opts.clock, timers: opts.clock,
+    clock: opts.clock, timers: opts.clock, fetch: opts.fetch,
     appVersion: opts.appVersion ?? '0.1.0', deviceName: () => settings.get().deviceName }) : undefined
   const system = linuxSystem ? { ...linuxSystem, network: net ?? mock.network,
     info: net ? withRealIp(linuxSystem.info, net) : linuxSystem.info,
@@ -151,7 +151,7 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const weather = new WeatherService({ fetch: opts.fetch, logger: logger.child('weather'),
     now: opts.clock ? () => opts.clock!.now() : undefined })
   const core = new Core({ hub, settings, secrets, player, apps, system, signin, logger, notices, weather,
-    timers: opts.clock,
+    timers: opts.clock, overnightUpdates: linux,
     bootOnce: linux ? async (key) => {
       try {
         await fs.writeFile(join(process.env.XDG_RUNTIME_DIR || tmpdir(), `mediaos-${key}`), '', { flag: 'wx', mode: 0o600 })

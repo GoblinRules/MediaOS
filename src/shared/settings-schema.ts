@@ -25,6 +25,7 @@ export const Settings = z.object({
   setupDone: z.boolean().default(false),
   deviceName: z.string().min(1).max(63).default('MediaOS'),
   language: z.string().max(20).default('en-GB'),
+  updates: z.object({ auto: z.boolean().default(true) }).prefault({}),
   sources: z.array(SourceConfig).max(MAX_SOURCES).default([]),
   /** Mock mode: the user removed the built-in demo library, so don't add it back on start. */
   demoRemoved: z.boolean().default(false),

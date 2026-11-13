@@ -15,6 +15,7 @@ import { MAX_SOURCES, SOURCE_LIMIT_MESSAGE } from '../sources/limits'
 import type { Log } from '../log/Logger'
 import type { WeatherService } from '../weather/WeatherService'
 import { runtime, type Runtime } from './runtime'
+import { UpdateScheduler } from './UpdateScheduler'
 
 export interface CoreOptions {
   hub: MediaHub; settings: SettingsStore; secrets: SecretStore; player: PlayerController
@@ -24,6 +25,8 @@ export interface CoreOptions {
   notices?: string[]
   bootOnce?: (key: string) => Promise<boolean>
   timers?: Runtime
+  /** Enabled by the Linux composition; mock mode does not install overnight. */
+  overnightUpdates?: boolean
   /** Weather beside the clock; without it the chip stays hidden. */
   weather?: Pick<WeatherService, 'search' | 'current'>
 }
@@ -49,6 +52,7 @@ export class Core {
   private screenOffCount = 0
   private waking: Promise<Result> | undefined
   private started = false
+  private updateScheduler?: UpdateScheduler
   private standbyTimers = new Map<ReturnType<typeof setTimeout>, () => void>()
   idle = false
 
@@ -68,8 +72,14 @@ export class Core {
         }).catch((error: unknown) => this.logger.warn('Network trial update failed', error))
       }),
       this.system.network.onToast((t) => this.emit('toast', { id: randomUUID(), text: t.text, tone: t.tone })),
-      this.system.bluetooth.on('changed', () => this.emit('system', { what: 'bluetooth' })))
+      this.system.bluetooth.on('changed', () => this.emit('system', { what: 'bluetooth' })),
+      this.system.updates.on('changed', () => this.emit('system', { what: 'updates' })))
     this.handlers = this.makeHandlers()
+    if (opts.overnightUpdates) this.updateScheduler = new UpdateScheduler({
+      settings: () => this.settings.get(), system: this.system, logger: this.logger, timers: opts.timers,
+      state: () => ({ idle: this.idle, screenOff: this.screenOff,
+        shell: this.foreground.kind === 'shell' && ['idle', 'ended', 'error'].includes(this.player.state().status) }),
+    })
   }
   async start(): Promise<void> {
     if (this.started) return
@@ -290,6 +300,13 @@ export class Core {
       'time.zones': () => system.time.zones(),
       'time.setTimezone': (tz) => system.time.setTimezone(tz),
       'updates.check': () => system.updates.check(),
+      'updates.status': () => system.updates.status(),
+      'updates.apply': async () => {
+        await this.revertPendingTrial(); await this.settings.flush(); return system.updates.apply()
+      },
+      'updates.rollback': async () => {
+        await this.revertPendingTrial(); await this.settings.flush(); return system.updates.rollback()
+      },
       'info.get': () => system.info.get(),
       'info.diagnostics': async () => ({ path: await system.info.collectDiagnostics() }),
       'shell.restart': async () => {
@@ -332,6 +349,7 @@ export class Core {
     }
   }
   dispose(): void {
+    this.updateScheduler?.dispose()
     ++this.trialSequence
     for (const [timer, resolve] of this.standbyTimers) { (this.opts.timers ?? runtime).clearTimeout(timer); resolve() }
     this.standbyTimers.clear()

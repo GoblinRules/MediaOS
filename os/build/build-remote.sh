@@ -3,8 +3,9 @@
 #   os/build/build-remote.sh [dev|release]
 # Settings (environment, or os/build/local.env, which git ignores): MEDIAOS_BUILD_HOST (user@host, required),
 # MEDIAOS_ISO_DIR (where the image is copied back to; default ~/MediaOS-images), MEDIAOS_SSH_KEY (public key for the dev image),
-# MEDIAOS_UPDATE_URL and MEDIAOS_UPDATE_KEY (the update server and its public signing key, .asc; leave both unset for
-# a box that can't update itself).
+# MEDIAOS_UPDATE_URL and MEDIAOS_UPDATE_KEY (the update server and its public signing key, .asc). They default to this
+# repository's GitHub releases and os/build/mediaos-archive.asc; set MEDIAOS_UPDATE_URL=none for a box that can't
+# update itself.
 set -eu
 
 local_env="$(dirname "$0")/local.env"
@@ -15,13 +16,17 @@ host="${MEDIAOS_BUILD_HOST:?Set MEDIAOS_BUILD_HOST to the build box (user@host),
 iso_dir="${MEDIAOS_ISO_DIR:-$HOME/MediaOS-images}"
 key="${MEDIAOS_SSH_KEY:-$HOME/.ssh/id_rsa.pub}"
 remote=mediaos-build
-update_url="${MEDIAOS_UPDATE_URL:-}"
-update_key="${MEDIAOS_UPDATE_KEY:-}"
+update_url="${MEDIAOS_UPDATE_URL:-https://github.com/GoblinRules/MediaOS/releases/latest/download/}"
+update_key="${MEDIAOS_UPDATE_KEY:-$(dirname "$0")/mediaos-archive.asc}"
+if [ "$update_url" = none ]; then update_url=; fi
 if [ -n "$update_url" ]; then
   echo "$update_url" | grep -qE '^https?://[A-Za-z0-9.:_~/-]+$' || { echo "MEDIAOS_UPDATE_URL isn't a plain http(s) address" >&2; exit 2; }
   [ -s "$update_key" ] || { echo "MEDIAOS_UPDATE_URL needs MEDIAOS_UPDATE_KEY (the server's public key, .asc)" >&2; exit 2; }
 fi
 repo=$(cd "$(dirname "$0")/../.." && pwd)
+# Which commit these packages come from, for release-github.sh ("-dirty" when the tree had uncommitted changes).
+commit=$(git -C "$repo" rev-parse HEAD 2>/dev/null || echo unknown)
+if [ -n "$(git -C "$repo" status --porcelain 2>/dev/null)" ]; then commit="$commit-dirty"; fi
 
 echo "== Copying the source to $host:~/$remote"
 ssh -o BatchMode=yes "$host" "mkdir -p ~/$remote/dist ~/$remote/cache && rm -rf ~/$remote/src && mkdir ~/$remote/src"
@@ -44,6 +49,8 @@ ssh -o BatchMode=yes "$host" "cd ~/$remote && docker build -q -t mediaos-build s
     sh -c 'sh /work/src/os/build/build-in-container.sh $variant; status=\$?; chown -R \$HOST_UID:\$HOST_GID /work; exit \$status'"
 
 version=$(node -p 'require(process.argv[1]).version' "$repo/package.json")
+# The update address goes last: it can be empty.
+ssh -o BatchMode=yes "$host" "printf '%s %s %s %s\n' '$version' '$commit' '$variant' '$update_url' > ~/$remote/dist/build-info"
 name="mediaos-$variant-$version.iso"
 echo "== Copying $name to $iso_dir"
 mkdir -p "$iso_dir"

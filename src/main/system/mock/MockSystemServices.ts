@@ -1,6 +1,8 @@
 import * as fs from 'node:fs/promises'
 import type { SystemServices } from '../SystemServices'
-import type { AudioSink, BtDevice, CecStatus, DisplayOutput, NetStatus, Result, WifiAp } from '@shared/system-types'
+import type {
+  AudioSink, BtDevice, CecStatus, DisplayOutput, NetStatus, Result, UpdateAction, UpdateInfo, WifiAp,
+} from '@shared/system-types'
 import { runtime, type Runtime } from '../../core/runtime'
 import { silentLog, type Log } from '../../log/Logger'
 import { collectDiagnostics } from '../diagnostics'
@@ -9,6 +11,7 @@ import { NetQueue } from '../net/NetQueue'
 import { IpTrial } from '../net/IpTrial'
 import { memoryJournal } from '../net/MemoryJournal'
 import { MockTrialBackend } from './MockTrialBackend'
+import { UserFacingError } from '../net/texts'
 
 export interface MockSystemOptions {
   scenario?: 'default' | 'offline' | 'noCec' | 'wifiOnly' | 'netUnmanaged'
@@ -28,6 +31,7 @@ export function createMockSystem(opts: MockSystemOptions = {}): SystemServices &
   const io = opts.fs ?? fs
   const networkListeners = new Set<() => void>()
   const bluetoothListeners = new Set<() => void>()
+  const updateListeners = new Set<() => void>()
   const waiting = new Map<ReturnType<typeof setTimeout>, () => void>()
   const wait = (ms = opts.delayMs ?? 350): Promise<void> => ms <= 0 ? Promise.resolve() : new Promise((resolve) => {
     const done = () => { waiting.delete(timer); resolve() }
@@ -79,6 +83,36 @@ export function createMockSystem(opts: MockSystemOptions = {}): SystemServices &
   const zones = ['Europe/London', 'Europe/Paris', 'Europe/Berlin', 'America/New_York',
     'America/Los_Angeles', 'Asia/Tokyo', 'Australia/Sydney']
   const fail = (error: string): Result => ({ ok: false, error })
+  const update: UpdateInfo = { configured: true, current: '0.1.0' }
+  const updateNotes = "What's new\n\n• Faster home screen\n• Weather beside the clock\n• Fixes for Plex resume"
+  const updateAction = async (action: UpdateAction): Promise<Result> => {
+    if (update.running) return fail('An update is already running. Wait for it to finish.')
+    update.running = action
+    changed(updateListeners)
+    let result = ok
+    try {
+      await wait()
+      if (action === 'check') {
+        update.available = update.current === '0.1.0' ? '0.2.0' : undefined
+        update.notes = update.available ? updateNotes : undefined
+        update.checkedAt = new Date(clock.now()).toISOString()
+      } else if (action === 'rollback') {
+        if (!update.previous) result = fail("There's no earlier version on this box to go back to.")
+        else {
+          update.skipped = update.current; update.available = update.current
+          update.current = update.previous; update.previous = undefined
+          update.notes = updateNotes
+        }
+      } else if (update.available && (action !== 'auto' || update.available !== update.skipped)) {
+        update.previous = update.current; update.current = update.available
+        update.available = undefined; update.notes = undefined; update.skipped = undefined
+        log.info('Mock update installed')
+      }
+      update.lastRun = { action, ok: result.ok, at: new Date(clock.now()).toISOString(),
+        ...(!result.ok ? { error: result.error } : {}) }
+      return result
+    } finally { update.running = undefined; changed(updateListeners) }
+  }
   const system: SystemServices & { dispose(): void } = {
     network: {
       status: async () => structuredClone(network),
@@ -180,8 +214,14 @@ export function createMockSystem(opts: MockSystemOptions = {}): SystemServices &
       zones: async () => [...zones],
     },
     updates: {
-      check: async () => ({ current: '0.1.0', checkedAt: new Date(clock.now()).toISOString() }),
-      apply: async () => ok,
+      status: async () => structuredClone(update),
+      check: async () => {
+        const result = await updateAction('check')
+        if (!result.ok) throw new UserFacingError(result.error)
+        return structuredClone(update)
+      },
+      apply: () => updateAction('apply'), rollback: () => updateAction('rollback'), auto: () => updateAction('auto'),
+      on: (_event, cb) => subscribe(updateListeners, cb),
     },
     info: {
       get: async () => ({ deviceName: 'MediaOS', version: '0.1.0', os: 'Debian 13 (mock)', kernel: '6.12.0',
@@ -191,7 +231,7 @@ export function createMockSystem(opts: MockSystemOptions = {}): SystemServices &
     },
     dispose: () => {
       trial.dispose()
-      networkListeners.clear(); bluetoothListeners.clear()
+      networkListeners.clear(); bluetoothListeners.clear(); updateListeners.clear()
       for (const [timer, done] of waiting) { clock.clearTimeout(timer); done() }
     },
   }

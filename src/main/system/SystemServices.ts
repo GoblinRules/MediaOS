@@ -57,6 +57,13 @@ export interface SystemServices {
   }
   power: { reboot(): Promise<Result>; powerOff(): Promise<Result> }
   time: { get(): Promise<TimeInfo>; setTimezone(tz: string): Promise<Result>; zones(): Promise<string[]> }
-  updates: { check(): Promise<UpdateInfo>; apply(): Promise<Result> }
+  updates: {
+    status(): Promise<UpdateInfo>
+    check(): Promise<UpdateInfo>
+    apply(): Promise<Result>
+    rollback(): Promise<Result>
+    auto(): Promise<Result>
+    on(ev: 'changed', cb: () => void): Unsub
+  }
   info: { get(): Promise<SysInfo>; collectDiagnostics(): Promise<string> }
 }

@@ -1,0 +1,13 @@
+[Unit]
+Description=Put back MediaOS after an update cut short by a power cut
+After=local-fs.target
+Before=greetd.service display-manager.service
+ConditionPathExists=/var/lib/mediaos-update/installing
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/mediaos/update repair
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

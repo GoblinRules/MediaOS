@@ -19,6 +19,30 @@ import { runtime } from '../../src/main/core/runtime'
 afterEach(() => vi.useRealTimers())
 
 describe('core composition and IPC', () => {
+  it.each([false, true])('owns the overnight timer only when enabled (%s) and disposes it', async (enabled) => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 10, 13, 5, 25))
+    const temp = await temporary()
+    const composed = await composeCore({ platform: 'mock', dataDir: temp.dir, logDir: temp.dir,
+      forceMockPlayer: true, mockDelayMs: 0, restartShell() {} })
+    const base = composed.core
+    const auto = vi.spyOn(base.system.updates, 'auto').mockResolvedValue({ ok: true })
+    let core = base
+    try {
+      await base.dispatch('shell.reportIdle', [true])
+      // The mock composition never enables the overnight timer on its own.
+      await vi.advanceTimersByTimeAsync(5 * 60000); expect(auto).not.toHaveBeenCalled()
+      base.dispose()
+      core = new Core({ ...base, overnightUpdates: enabled, timers: runtime,
+        restartShell() {}, clearCaches: async () => undefined })
+      await core.dispatch('shell.reportIdle', [true])
+      await vi.advanceTimersByTimeAsync(5 * 60000)
+      expect(auto).toHaveBeenCalledTimes(enabled ? 1 : 0)
+      core.dispose()
+      vi.setSystemTime(new Date(2026, 10, 14, 5, 25)); await vi.advanceTimersByTimeAsync(5 * 60000)
+      expect(auto).toHaveBeenCalledTimes(enabled ? 1 : 0)
+    } finally { core.dispose(); await composed.dispose(); await temp.dispose() }
+    expect(vi.getTimerCount()).toBe(0)
+  })
   it('dispatches every CALLS name with valid arguments through the mock composition', async () => {
     vi.useFakeTimers()
     const temp = await temporary(), restartShell = vi.fn()
@@ -56,7 +80,8 @@ describe('core composition and IPC', () => {
         'bluetooth.devices': [], 'bluetooth.scan': [true], 'bluetooth.pair': ['AA:BB:CC:00:00:02'],
         'bluetooth.remove': ['AA:BB:CC:00:00:02'], 'cec.status': [], 'cec.wakeTv': [], 'cec.standbyTv': [],
         'power.reboot': [], 'power.powerOff': [], 'power.screenOff': [], 'power.screenOn': [], 'time.get': [], 'time.zones': [],
-        'time.setTimezone': ['Europe/London'], 'updates.check': [], 'info.get': [], 'info.diagnostics': [],
+        'time.setTimezone': ['Europe/London'], 'updates.check': [], 'updates.status': [], 'updates.apply': [],
+        'updates.rollback': [], 'info.get': [], 'info.diagnostics': [],
         'shell.restart': [], 'shell.factoryReset': ['ERASE'], 'shell.reportIdle': [true], 'shell.notices': [],
       }
       const seen = new Set<string>()
@@ -131,6 +156,8 @@ describe('core composition and IPC', () => {
       await core.dispatch('network.connect', ['Home Wi-Fi', 'correct'])
       await core.dispatch('bluetooth.scan', [true]); expect(changes).toContainEqual({ what: 'network' })
       expect(changes).toContainEqual({ what: 'bluetooth' })
+      await core.dispatch('updates.check', [])
+      expect(changes.filter((change) => change.what === 'updates')).toEqual([{ what: 'updates' }, { what: 'updates' }])
       expect(foreground).toEqual([{ kind: 'player' }, { kind: 'shell' }, { kind: 'app', appId: 'youtube' }, { kind: 'shell' }])
     } finally { await composed.dispose(); await temp.dispose() }
     expect(vi.getTimerCount()).toBe(0)
@@ -197,7 +224,8 @@ describe('core composition and IPC', () => {
       expect(await core.system.network.trial()).toBeNull()
     } finally { await composed.dispose(); await temp.dispose() }
   })
-  it.each(['power.reboot', 'power.powerOff', 'power.screenOff'] as const)('reverts a pending trial before %s', async (call) => {
+  it.each(['power.reboot', 'power.powerOff', 'power.screenOff', 'updates.apply', 'updates.rollback'] as const)(
+    'reverts a pending trial before %s', async (call) => {
     const temp = await temporary()
     const composed = await composeCore({ platform: 'mock', dataDir: temp.dir, logDir: join(temp.dir, 'logs'),
       forceMockPlayer: true, mockDelayMs: 0, restartShell() {} })
@@ -205,11 +233,19 @@ describe('core composition and IPC', () => {
     try {
       await core.system.network.applyIp('wired', { method: 'auto', dns: { mode: 'auto' } })
       const revert = vi.spyOn(core.system.network, 'revert')
-      const action = call === 'power.screenOff' ? vi.spyOn(core.system.display, 'power')
+      const action = call === 'updates.apply' || call === 'updates.rollback'
+        ? vi.spyOn(core.system.updates, call === 'updates.apply' ? 'apply' : 'rollback').mockResolvedValue({ ok: true })
+        : call === 'power.screenOff' ? vi.spyOn(core.system.display, 'power')
         : vi.spyOn(core.system.power, call === 'power.reboot' ? 'reboot' : 'powerOff')
+      const flush = vi.spyOn(core.settings, 'flush')
       expect(await core.dispatch(call, [])).toEqual({ ok: true })
       expect(revert.mock.invocationCallOrder[0]).toBeLessThan(action.mock.invocationCallOrder[0]!)
       expect(await core.system.network.trial()).toBeNull()
+      if (call.startsWith('updates.')) {
+        expect(flush).toHaveBeenCalledOnce()
+        expect(revert.mock.invocationCallOrder[0]).toBeLessThan(flush.mock.invocationCallOrder[0]!)
+        expect(flush.mock.invocationCallOrder[0]).toBeLessThan(action.mock.invocationCallOrder[0]!)
+      }
     } finally { await composed.dispose(); await temp.dispose() }
   })
   it('switches the screen back on only after MediaOS switched it off, once per wake', async () => {

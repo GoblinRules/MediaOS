@@ -2,6 +2,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { SourceInfo, SourceStatus } from '@shared/media-types'
 import type { HomeRowId, Settings } from '@shared/settings-schema'
+import type { UpdateAction } from '@shared/system-types'
 import { placeDetail, placeLabel, type WeatherPlace } from '@shared/weather'
 import { run, tryCall } from '../../lib/api'
 import { openAppMenu } from '../../lib/apps'
@@ -448,13 +449,164 @@ function zoneLabel(z: string): string {
   return z.replace(/_/g, ' ').replace(/\//g, ' / ')
 }
 
+/** "today at 04:12", "yesterday at 21:40" or "3 Nov". */
+function whenText(iso: string): string | undefined {
+  const t = new Date(iso)
+  if (Number.isNaN(t.getTime())) return undefined
+  const day = (d: Date): string => d.toDateString()
+  const now = new Date()
+  const time = t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  if (day(t) === day(now)) return `today at ${time}`
+  if (day(t) === day(new Date(now.getTime() - 86_400_000))) return `yesterday at ${time}`
+  return t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+/** whenText for the middle of a sentence: "today at 04:12" or "on 3 Nov". */
+function whenInSentence(iso: string): string {
+  const when = whenText(iso)
+  return !when ? 'recently' : /^(today|yesterday) /.test(when) ? when : `on ${when}`
+}
+
+/** Release notes short enough for the install question to fit on the screen, cut at a line or word. */
+function shortNotes(notes: string, max = 600): string {
+  if (notes.length <= max) return notes
+  const cut = notes.slice(0, max)
+  const at = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf(' '))
+  return `${cut.slice(0, at > max / 2 ? at : max).trimEnd()}…`
+}
+
+const RUNNING: Record<UpdateAction, string> = {
+  check: 'Checking…',
+  apply: 'Installing…',
+  auto: 'Updating…',
+  rollback: 'Going back…',
+}
+
+function UpdateRows({ k }: { k: (n: string) => string }): ReactNode {
+  const s = useSettings()
+  const status = useCall('updates.status', [])
+  // Shows straight away; core's own "running" arrives a moment later with the change event.
+  const [asked, setAsked] = useState<UpdateAction>()
+  const u = status.data
+  const running = asked ?? u?.running
+  const busy = running !== undefined
+
+  const check = async (): Promise<void> => {
+    setAsked('check')
+    const r = await tryCall('updates.check')
+    setAsked(undefined)
+    status.reload()
+    if (r && !r.available) toast('MediaOS is up to date.', 'ok')
+  }
+  const act = async (action: 'apply' | 'rollback', version: string): Promise<void> => {
+    setAsked(action)
+    const done = await run(action === 'apply' ? 'updates.apply' : 'updates.rollback')
+    setAsked(undefined)
+    status.reload()
+    if (done) toast(`MediaOS ${version} is installed. The box is restarting to finish.`, 'ok')
+  }
+  const install = (): void => {
+    if (!u?.available) return
+    const version = u.available
+    const notes = u.notes ? `${shortNotes(u.notes)}\n\n` : ''
+    confirm({
+      title: `Install MediaOS ${version}?`,
+      body: `${notes}The box restarts when it's done, which takes a few minutes. Don't switch it off meanwhile.`,
+      confirmLabel: 'Install and restart',
+      onConfirm: () => void act('apply', version),
+    })
+  }
+  const goBack = (): void => {
+    if (!u?.previous) return
+    const version = u.previous
+    confirm({
+      title: `Go back to MediaOS ${version}?`,
+      body: `Use this if something stopped working after the last update. The box restarts when it's done. ` +
+        `MediaOS ${u.current} won't be installed overnight again, but you can still install it here.`,
+      confirmLabel: 'Go back and restart',
+      startOnCancel: true,
+      onConfirm: () => void act('rollback', version),
+    })
+  }
+
+  const checked = u?.checkedAt ? whenText(u.checkedAt) : undefined
+  // The last action's failure stays on its own row until another action replaces it (the toast goes after a moment).
+  const failed = u?.lastRun && !u.lastRun.ok ? u.lastRun : undefined
+  const failedText = (action: UpdateAction): string | undefined => failed?.action === action ? failed.error : undefined
+  const checkValue = running === 'check' || running === 'auto'
+    ? RUNNING[running]
+    : !u ? undefined
+    : !u.configured ? 'Not set up'
+    : u.available ? `MediaOS ${u.available} is ready`
+    : failed?.action === 'check' ? "Couldn't check"
+    : checked ? 'Up to date' : undefined
+  const checkDetail = !u ? undefined
+    : !u.configured ? `Updates aren't set up on this box. It has MediaOS ${u.current}.`
+    : `This box has MediaOS ${u.current}.${checked ? ` Last checked ${checked}.` : ''}`
+  const overnightFailed = failed?.action === 'auto'
+    ? `The overnight update ${whenInSentence(failed.at)} didn't work. ${failed.error ?? ''}`.trimEnd()
+    : undefined
+
+  return (
+    <Section title="Updates">
+      <RowsState loading={status.loading && !u} error={status.error} focusKey={k('updates-retry')} onRetry={status.reload} />
+      {u && (
+        <>
+          <SettingRow
+            focusKey={k('updates')}
+            icon="download"
+            label="Check for updates"
+            detail={checkDetail}
+            value={checkValue}
+            onSelect={busy ? undefined : () => void check()}
+            testId="updates-check"
+          />
+          {u.available && (
+            <SettingRow
+              focusKey={k('updates-install')}
+              icon="download"
+              label={`Install MediaOS ${u.available}`}
+              detail={failedText('apply') ?? (u.skipped === u.available
+                ? "You went back from this version, so it won't install overnight. You can still install it here."
+                : "See what's new, then install. The box restarts when it's done.")}
+              value={running === 'apply' ? RUNNING.apply : undefined}
+              onSelect={busy ? undefined : install}
+              opens={!busy}
+              testId="updates-install"
+            />
+          )}
+          {u.configured && (
+            <ToggleRow
+              focusKey={k('updates-auto')}
+              icon="clock"
+              label="Install updates overnight"
+              detail={overnightFailed ?? "Between 4 and 6 in the morning, only when nobody's watching."}
+              on={s.updates.auto}
+              onChange={(auto) => void updateSettings({ updates: { auto } })}
+            />
+          )}
+          {u.previous && (
+            <SettingRow
+              focusKey={k('updates-back')}
+              icon="refresh"
+              label={`Go back to MediaOS ${u.previous}`}
+              detail={failedText('rollback') ?? 'If something stopped working after the last update.'}
+              value={running === 'rollback' ? RUNNING.rollback : undefined}
+              onSelect={busy ? undefined : goBack}
+              testId="updates-back"
+            />
+          )}
+        </>
+      )}
+    </Section>
+  )
+}
+
 export function SystemPage({ k }: K): ReactNode {
   const s = useSettings()
   const info = useCall('info.get', [])
   const time = useCall('time.get', [])
   const zones = useCall('time.zones', [])
-  const [update, setUpdate] = useState<string>()
-  const [checking, setChecking] = useState(false)
 
   const rename = (): void =>
     keyboard({
@@ -467,13 +619,6 @@ export function SystemPage({ k }: K): ReactNode {
         if (clean && clean !== s.deviceName) void updateSettings({ deviceName: clean }).then(info.reload)
       },
     })
-  const checkUpdates = async (): Promise<void> => {
-    setChecking(true)
-    const r = await tryCall('updates.check')
-    setChecking(false)
-    if (!r) return
-    setUpdate(r.available ? `MediaOS ${r.available} is available` : `Up to date (${r.current})`)
-  }
   const i = info.data
   const facts: [string, string, string | undefined][] = i
     ? [
@@ -504,13 +649,6 @@ export function SystemPage({ k }: K): ReactNode {
           onChange={(z) => void run('time.setTimezone', z).then(time.reload)}
         />
         <SettingRow
-          focusKey={k('updates')}
-          icon="download"
-          label="Check for updates"
-          value={checking ? 'Checking…' : update}
-          onSelect={() => void checkUpdates()}
-        />
-        <SettingRow
           focusKey={k('setup')}
           icon="refresh"
           label="Run the welcome steps again"
@@ -518,6 +656,7 @@ export function SystemPage({ k }: K): ReactNode {
           onSelect={() => void updateSettings({ setupDone: false })}
         />
       </Section>
+      <UpdateRows k={k} />
       <Section title="About">
         <RowsState loading={info.loading && !i} error={info.error} focusKey={k('info-retry')} onRetry={info.reload} />
         {facts

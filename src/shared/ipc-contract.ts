@@ -156,6 +156,9 @@ export const CALLS = {
   'time.zones': z.tuple([]),
   'time.setTimezone': z.tuple([z.string().min(1).max(64)]),
   'updates.check': z.tuple([]),
+  'updates.status': z.tuple([]),
+  'updates.apply': z.tuple([]),
+  'updates.rollback': z.tuple([]),
   'info.get': z.tuple([]),
   'info.diagnostics': z.tuple([]),
   'shell.restart': z.tuple([]),
@@ -276,6 +279,9 @@ export interface CallResults {
   'time.zones': string[]
   'time.setTimezone': Result
   'updates.check': UpdateInfo
+  'updates.status': UpdateInfo
+  'updates.apply': Result
+  'updates.rollback': Result
   'info.get': SysInfo
   'info.diagnostics': { path: string }
   'shell.restart': Result
@@ -301,7 +307,7 @@ export interface EventPayloads {
   toast: Toast
   foreground: Foreground
   /** Something in Settings > Network / Bluetooth changed. */
-  system: { what: 'network' | 'bluetooth' | 'audio' | 'display' }
+  system: { what: 'network' | 'bluetooth' | 'audio' | 'display' | 'updates' }
   /** Core asks the UI to open the Recovery menu (long Home, Ctrl+Alt+Backspace, crash loop). */
   recovery: Record<string, never>
   /** A network trial started, ticked, changed its checks or ended (null). */
@@ -315,7 +321,7 @@ export const EVENT_SCHEMAS: { [K in EventName]: z.ZodType } = {
   homeChanged: z.object({}).loose(),
   toast: z.object({ id: z.string(), text: z.string().max(500), tone: z.enum(['info', 'warn', 'error', 'ok']).optional() }),
   foreground: z.object({ kind: z.enum(['shell', 'player', 'app']), appId: z.string().optional() }),
-  system: z.object({ what: z.enum(['network', 'bluetooth', 'audio', 'display']) }),
+  system: z.object({ what: z.enum(['network', 'bluetooth', 'audio', 'display', 'updates']) }),
   recovery: z.object({}).loose(),
   netTrial: z.object({ trial: NetTrialSchema.nullable() }).strict(),
 }

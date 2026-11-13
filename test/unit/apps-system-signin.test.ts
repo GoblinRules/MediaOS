@@ -103,6 +103,51 @@ describe('apps', () => {
 })
 
 describe('mock system', () => {
+  it('checks, installs, goes back and leaves the skipped version alone overnight', async () => {
+    vi.useFakeTimers()
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const system = createMockSystem({ delayMs: 50, logger }), changed = vi.fn()
+    const unsub = system.updates.on('changed', changed)
+    try {
+      expect(await system.updates.status()).toEqual({ configured: true, current: '0.1.0' })
+      const check = system.updates.check()
+      expect((await system.updates.status()).running).toBe('check')
+      await expect(system.updates.check()).rejects.toThrow('An update is already running. Wait for it to finish.')
+      expect(await system.updates.apply()).toMatchObject({ ok: false })
+      await vi.advanceTimersByTimeAsync(49)
+      expect((await system.updates.status()).available).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(await check).toMatchObject({ configured: true, current: '0.1.0', available: '0.2.0',
+        notes: "What's new\n\n• Faster home screen\n• Weather beside the clock\n• Fixes for Plex resume" })
+      const apply = system.updates.apply(); await vi.advanceTimersByTimeAsync(50)
+      expect(await apply).toEqual({ ok: true })
+      expect(await system.updates.status()).toMatchObject({ current: '0.2.0', previous: '0.1.0', available: undefined })
+      expect(logger.info).toHaveBeenCalledWith('Mock update installed')
+      const rollback = system.updates.rollback(); await vi.advanceTimersByTimeAsync(50)
+      expect(await rollback).toEqual({ ok: true })
+      expect(await system.updates.status()).toMatchObject({ current: '0.1.0', skipped: '0.2.0', previous: undefined })
+      const auto = system.updates.auto(); await vi.advanceTimersByTimeAsync(50)
+      expect(await auto).toEqual({ ok: true })
+      expect((await system.updates.status()).current).toBe('0.1.0')
+      const manual = system.updates.apply(); await vi.advanceTimersByTimeAsync(50); await manual
+      expect(await system.updates.status()).toMatchObject({ current: '0.2.0', skipped: undefined })
+      expect(changed).toHaveBeenCalledTimes(10)
+      unsub()
+      const upToDate = system.updates.check(); await vi.advanceTimersByTimeAsync(50); await upToDate
+      expect((await system.updates.status()).available).toBeUndefined()
+      const noUpdate = system.updates.auto(); await vi.advanceTimersByTimeAsync(50); await noUpdate
+      expect(logger.info).toHaveBeenCalledTimes(2)
+      expect(changed).toHaveBeenCalledTimes(10)
+    } finally { system.dispose() }
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('explains when there is no earlier version to go back to', async () => {
+    const system = createMockSystem({ delayMs: 0 })
+    try {
+      expect(await system.updates.rollback()).toEqual({ ok: false,
+        error: "There's no earlier version on this box to go back to." })
+    } finally { system.dispose() }
+  })
   it('changes network state with events and rejects wrong Wi-Fi passwords', async () => {
     const system = createMockSystem({ delayMs: 0 })
     const changed = vi.fn(), unsub = system.network.on('changed', changed)

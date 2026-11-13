@@ -10,6 +10,7 @@ import { UserFacingError } from '../net/texts'
 import { NodeCommandRunner, type CommandRunner } from './CommandRunner'
 import { createLinuxBluetooth } from './LinuxBluetooth'
 import { createLinuxCec, type CecFs } from './LinuxCec'
+import { createLinuxUpdates, type UpdateFs } from './LinuxUpdates'
 import type { Runtime } from '../../core/runtime'
 import { fallbackZones, parseAudioOutputs, parseDisplayOutputs, parseOsRelease, parseTime, parseVolume,
   parseZones, safeOutputName, testToneWav } from './system-parse'
@@ -22,7 +23,8 @@ export interface LinuxSystemOptions {
   logDir?: string
   clock?: { now(): number }
   timers?: Runtime
-  fs?: DiagnosticsIo & Partial<Pick<CecFs, 'stat'>> & {
+  fetch?: typeof fetch
+  fs?: DiagnosticsIo & Partial<Pick<CecFs, 'stat'> & Pick<UpdateFs, 'access'>> & {
     statfs(path: string): Promise<{ blocks: number; bsize: number; bavail: number }>
   }
   os?: {
@@ -40,7 +42,6 @@ export function createLinuxSystem(opts: LinuxSystemOptions): LinuxSystem {
   let disposed = false
   let channels = 'stereo'
   let cachedZones: string[] | undefined
-  const updatesMessage = `Updates aren't set up yet. This box has MediaOS ${opts.appVersion}.`
   const run = async (file: string, args: readonly string[], timeoutMs = 4000): Promise<string | undefined> => {
     if (disposed) return undefined
     try {
@@ -87,6 +88,9 @@ export function createLinuxSystem(opts: LinuxSystemOptions): LinuxSystem {
     return [...fallbackZones]
   }
   const bluetooth = createLinuxBluetooth({ runner, logger, timers: opts.timers })
+  const updates = createLinuxUpdates({ runner, logger, appVersion: opts.appVersion, clock, fetch: opts.fetch,
+    fs: { readFile: (path, encoding) => io.readFile(path, encoding),
+      access: (path) => io.access ? io.access(path) : Promise.reject(new Error('Update source access is unavailable')) } })
   const cec = createLinuxCec({ runner, logger, timers: opts.timers,
     fs: { readdir: (path) => io.readdir(path), readFile: (path, encoding) => io.readFile(path, encoding),
       stat: (path) => io.stat ? io.stat(path) : Promise.reject(new Error('EDID file sizes are unavailable')) } })
@@ -166,9 +170,7 @@ export function createLinuxSystem(opts: LinuxSystemOptions): LinuxSystem {
         return action('timedatectl', ['set-timezone', tz], "The time zone couldn't be changed. Try again.")
       },
     },
-    updates: {
-      check: async () => { throw new UserFacingError(updatesMessage) }, apply: async () => fail(updatesMessage),
-    },
+    updates,
     info: {
       get: async (): Promise<SysInfo> => {
         let distribution = 'Linux'
@@ -193,7 +195,7 @@ export function createLinuxSystem(opts: LinuxSystemOptions): LinuxSystem {
         }
       },
     },
-    dispose: () => { disposed = true; bluetooth.dispose(); cec.dispose() },
+    dispose: () => { disposed = true; bluetooth.dispose(); cec.dispose(); updates.dispose() },
   }
   return system
 }
