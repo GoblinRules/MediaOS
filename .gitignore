@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist/
+test-results/
+playwright-report/
+*.log
+.env
+.dev-data/
+
+# Private: design notes, worker task files, reviews, screenshots and local build settings stay off the public repo.
+.reviews/
+.screens/
+docs/
+tasks/
+AGENTS.md
+os/build/local.env

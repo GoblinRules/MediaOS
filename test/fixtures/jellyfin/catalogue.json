@@ -1,0 +1,62 @@
+{
+  "movie": {
+    "Id": "film-harbour", "Name": "The Quiet Harbour", "Type": "Movie", "ProductionYear": 2024,
+    "RunTimeTicks": 72002500000, "Overview": "A lighthouse keeper receives a letter from the future.",
+    "DateCreated": "2026-10-18T20:00:00Z", "PremiereDate": "2024-03-02T00:00:00Z",
+    "OfficialRating": "12", "CommunityRating": 7.8, "Genres": ["Drama", "Mystery"],
+    "ProviderIds": {"Imdb": "tt9876543", "Tmdb": "567890", "Tvdb": "123456"},
+    "ImageTags": {"Primary": "poster-harbour", "Thumb": "thumb-harbour", "Logo": "logo-harbour"},
+    "BackdropImageTags": ["back-harbour"], "Taglines": ["Every light tells a story."],
+    "UserData": {"PlaybackPositionTicks": 601250000, "PlayedPercentage": 0.83, "Played": false,
+      "IsFavorite": true, "LastPlayedDate": "2026-11-10T20:20:00Z"},
+    "People": [{"Name": "Maya Birch", "Type": "Actor", "Role": "The keeper"},
+      {"Name": "Ellis Rowe", "Type": "Director"}],
+    "Studios": [{"Name": "Lantern Films"}],
+    "MediaSources": [{"Id": "media-harbour", "MediaStreams": [
+      {"Index": 0, "Type": "Video", "Codec": "hevc", "Width": 3840, "Height": 2160, "VideoRangeType": "HDR10"},
+      {"Index": 2, "Type": "Audio", "Language": "eng", "Codec": "eac3", "Channels": 6, "IsDefault": true},
+      {"Index": 6, "Type": "Subtitle", "Language": "fre", "Codec": "srt", "IsExternal": true,
+        "IsTextSubtitleStream": true, "DeliveryUrl": "/Videos/film-harbour/media-harbour/Subtitles/6/Stream.srt"},
+      {"Index": 3, "Type": "Audio", "Language": "eng", "Codec": "aac", "Channels": 2, "IsDefault": false},
+      {"Index": 4, "Type": "Subtitle", "Language": "eng", "Codec": "pgssub", "IsForced": true, "IsDefault": true},
+      {"Index": 5, "Type": "Subtitle", "Language": "eng", "Codec": "vtt", "IsExternal": true,
+        "IsTextSubtitleStream": true, "DeliveryUrl": "/Videos/film-harbour/media-harbour/Subtitles/5/Stream.vtt"},
+      {"Index": 7, "Type": "Subtitle", "Codec": "dvdsub", "IsExternal": true, "IsTextSubtitleStream": false,
+        "DeliveryUrl": "/Videos/film-harbour/media-harbour/Subtitles/7/Stream.sub"}
+    ]}]
+  },
+  "show": {
+    "Id": "show-tides", "Name": "Changing Tides", "Type": "Series", "ProductionYear": 2025,
+    "ImageTags": {"Primary": "poster-tides"}, "BackdropImageTags": ["back-tides"],
+    "UserData": {"UnplayedItemCount": 8, "Played": false}
+  },
+  "season": {
+    "Id": "season-tides-2", "Name": "Season 2", "Type": "Season", "IndexNumber": 2,
+    "SeriesId": "show-tides", "SeriesName": "Changing Tides", "ParentId": "show-tides",
+    "ParentPrimaryImageItemId": "show-tides", "ParentPrimaryImageTag": "poster-tides",
+    "SeriesPrimaryImageTag": "poster-tides", "ParentBackdropItemId": "show-tides",
+    "ParentBackdropImageTags": ["back-tides"], "UserData": {"UnplayedItemCount": 3}
+  },
+  "episode": {
+    "Id": "episode-tides-5", "Name": "The Lantern", "Type": "Episode", "IndexNumber": 5,
+    "ParentIndexNumber": 2, "SeriesId": "show-tides", "SeriesName": "Changing Tides",
+    "SeasonId": "season-tides-2", "ParentId": "season-tides-2", "RunTimeTicks": 26000000000,
+    "UserData": {"PlaybackPositionTicks": 125000000, "Played": false, "IsFavorite": false},
+    "ImageTags": {"Primary": "still-lantern"}, "SeriesPrimaryImageTag": "poster-tides",
+    "ParentBackdropItemId": "show-tides", "ParentBackdropImageTags": ["back-tides"]
+  },
+  "next": {
+    "Id": "episode-tides-6", "Name": "Open Water", "Type": "Episode", "IndexNumber": 6,
+    "ParentIndexNumber": 2, "SeriesId": "show-tides", "SeriesName": "Changing Tides",
+    "SeasonId": "season-tides-2", "RunTimeTicks": 27000000000,
+    "SeriesPrimaryImageTag": "poster-tides", "UserData": {"PlaybackPositionTicks": 0, "Played": false}
+  },
+  "video": {"Id": "video-coast", "Name": "A Walk Along the Coast", "Type": "Video", "RunTimeTicks": 600000000},
+  "libraries": [
+    {"Id": "movies", "Name": "Films", "Type": "CollectionFolder", "CollectionType": "movies", "ChildCount": 42},
+    {"Id": "shows", "Name": "Television", "Type": "CollectionFolder", "CollectionType": "tvshows"},
+    {"Id": "home", "Name": "Our videos", "Type": "CollectionFolder", "CollectionType": "homevideos"},
+    {"Id": "mixed", "Name": "Everything", "Type": "CollectionFolder"},
+    {"Id": "music", "Name": "Music", "Type": "CollectionFolder", "CollectionType": "music"}
+  ]
+}

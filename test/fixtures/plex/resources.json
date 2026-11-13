@@ -1,0 +1,53 @@
+[
+  {
+    "clientIdentifier": "server-b",
+    "name": "Aunt June",
+    "owned": false,
+    "provides": "server",
+    "accessToken": "private-server-b",
+    "connections": [
+      {
+        "uri": "https://remote-b.plex.direct:32400",
+        "address": "192.168.1.30",
+        "port": 32400,
+        "protocol": "https",
+        "local": false,
+        "relay": false,
+        "IPv6": false
+      }
+    ]
+  },
+  {
+    "clientIdentifier": "server-a",
+    "name": "Home Plex",
+    "owned": true,
+    "provides": "player,server",
+    "accessToken": "private-server-a",
+    "connections": [
+      {
+        "uri": "https://home-a.plex.direct:32400",
+        "address": "192.168.1.20",
+        "port": 32400,
+        "protocol": "https",
+        "local": true,
+        "relay": false,
+        "IPv6": false
+      }
+    ]
+  },
+  {
+    "clientIdentifier": "player",
+    "name": "Other app",
+    "provides": "player",
+    "connections": [
+      {
+        "uri": "http://192.168.1.99:3000"
+      }
+    ]
+  },
+  {
+    "name": "Malformed",
+    "provides": "server",
+    "connections": []
+  }
+]

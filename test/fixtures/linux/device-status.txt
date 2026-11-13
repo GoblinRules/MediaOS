@@ -1,0 +1,2 @@
+ens160:ethernet:connected:142be7a3-d9fb-485d-bf09-8f7742f9f08e
+lo:loopback:connected (externally):876f769f-cf36-4a09-b985-2093d73ce0a0

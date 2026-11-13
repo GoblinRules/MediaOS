@@ -1,0 +1,11 @@
+# MediaOS: greetd signs the mediaos user straight into the TV session at boot, and starts it again if it ends.
+[terminal]
+vt = 7
+
+[initial_session]
+command = "/usr/libexec/mediaos/session"
+user = "mediaos"
+
+[default_session]
+command = "/usr/libexec/mediaos/session"
+user = "mediaos"

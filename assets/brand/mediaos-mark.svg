@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="MediaOS">
+  <!-- MediaOS mark: a glowing TV screen with a play button. Works from 16 px up. Keep in step with src/renderer/src/components/Logo.tsx. -->
+  <defs>
+    <linearGradient id="mo-tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c2333"/>
+      <stop offset="1" stop-color="#0b0d12"/>
+    </linearGradient>
+    <linearGradient id="mo-screen" x1="92" y1="118" x2="420" y2="344" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#46d4ff"/>
+      <stop offset="0.55" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="mo-sheen" x1="0" y1="118" x2="0" y2="344" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="mo-glow" cx="256" cy="236" r="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4f8cff" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#4f8cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#mo-tile)"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="#fff" stroke-opacity="0.08" stroke-width="3"/>
+  <circle cx="256" cy="236" r="210" fill="url(#mo-glow)"/>
+  <rect x="92" y="118" width="328" height="226" rx="40" fill="url(#mo-screen)"/>
+  <rect x="92" y="118" width="328" height="226" rx="40" fill="url(#mo-sheen)"/>
+  <path d="M230 186v90l74-45z" fill="#f2f4f8" stroke="#f2f4f8" stroke-width="26" stroke-linejoin="round"/>
+  <path d="M206 398h100" stroke="#f2f4f8" stroke-opacity="0.9" stroke-width="26" stroke-linecap="round"/>
+</svg>

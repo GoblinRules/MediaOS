@@ -1,0 +1,16 @@
+[Unit]
+Description=MediaOS home screen
+# Five crashes inside a minute and systemd stops trying (the Recovery screen for that case comes in a later phase).
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Environment=MEDIAOS_PLATFORM=linux
+Environment=MEDIAOS_REAL_SYSTEM=network
+ExecStart=/opt/MediaOS/mediaos-shell --ozone-platform=wayland
+Restart=always
+RestartSec=1
+# Stopping the shell also closes any streaming app or video it started.
+KillMode=control-group
+TimeoutStopSec=5

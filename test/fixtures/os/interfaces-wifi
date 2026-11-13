@@ -1,0 +1,24 @@
+source /etc/network/interfaces.d/*
+source-directory /etc/network/interfaces.d
+
+auto lo
+iface lo inet loopback
+    up echo loopback
+
+auto wlan0
+allow-hotplug wlan0
+iface wlan0 inet dhcp
+    wpa-ssid Home Wi-Fi
+    wpa-psk keep-this-private
+
+# Leave the Wi-Fi IPv6 stanza too.
+iface wlan0 inet6 auto
+    accept_ra 1
+
+allow-hotplug eth0
+iface eth0 inet static
+    address 192.0.2.2/24
+    gateway 192.0.2.1
+    # Keep this comment.
+
+source /etc/network/extra

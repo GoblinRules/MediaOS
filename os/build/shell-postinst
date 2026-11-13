@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+  # Chromium's sandbox helper must be owned by root and setuid, or the shell refuses to start.
+  chown root:root /opt/MediaOS/chrome-sandbox
+  chmod 4755 /opt/MediaOS/chrome-sandbox
+fi
+exit 0

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' mediaos-img: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>MediaOS</title>
+  </head>
+  <body style="margin: 0; background: #0b0d12">
+    <!-- Start-up screen: shown until the app has loaded, then React replaces everything inside #root. -->
+    <div id="root">
+      <div
+        data-testid="boot-splash"
+        style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 1.6vw; background: radial-gradient(70% 70% at 50% 45%, #121a2c 0%, #07080b 75%); color: #f2f4f8;
+          font-family: 'Inter', 'Noto Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased"
+      >
+        <svg width="8vw" height="8vw" viewBox="0 0 512 512" aria-hidden="true" style="filter: drop-shadow(0 1vw 2.6vw rgba(79, 140, 255, 0.35))">
+          <defs>
+            <linearGradient id="boot-t" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#1c2333" /><stop offset="1" stop-color="#0b0d12" />
+            </linearGradient>
+            <linearGradient id="boot-s" x1="92" y1="118" x2="420" y2="344" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#46d4ff" /><stop offset="0.55" stop-color="#4f8cff" /><stop offset="1" stop-color="#8b5cf6" />
+            </linearGradient>
+            <linearGradient id="boot-h" x1="0" y1="118" x2="0" y2="344" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#fff" stop-opacity="0.22" /><stop offset="0.5" stop-color="#fff" stop-opacity="0" />
+            </linearGradient>
+            <radialGradient id="boot-g" cx="256" cy="236" r="210" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#4f8cff" stop-opacity="0.4" /><stop offset="1" stop-color="#4f8cff" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+          <rect width="512" height="512" rx="112" fill="url(#boot-t)" />
+          <rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="#fff" stroke-opacity="0.08" stroke-width="3" />
+          <circle cx="256" cy="236" r="210" fill="url(#boot-g)" />
+          <rect x="92" y="118" width="328" height="226" rx="40" fill="url(#boot-s)" />
+          <rect x="92" y="118" width="328" height="226" rx="40" fill="url(#boot-h)" />
+          <path d="M230 186v90l74-45z" fill="#f2f4f8" stroke="#f2f4f8" stroke-width="26" stroke-linejoin="round" />
+          <path d="M206 398h100" stroke="#f2f4f8" stroke-opacity="0.9" stroke-width="26" stroke-linecap="round" />
+        </svg>
+        <div style="font-size: 3vw; font-weight: 700; letter-spacing: -0.035em; line-height: 1">
+          Media<b
+            style="font-weight: 800; background: linear-gradient(90deg, #46d4ff, #4f8cff 50%, #8b5cf6); -webkit-background-clip: text;
+              background-clip: text; color: transparent"
+            >OS</b
+          >
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

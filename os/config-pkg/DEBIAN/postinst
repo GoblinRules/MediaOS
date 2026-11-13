@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+  # During installation this runs inside the installer, where systemd isn't running: enabling still works,
+  # reloading doesn't (and doesn't need to).
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable greetd.service
+  # Enable for the next boot only: starting it or restarting NetworkManager here would drop SSH.
+  systemctl enable mediaos-net-handover.service
+  systemctl set-default graphical.target
+  # TV-remote (HDMI-CEC) button remap and the Pulse-Eight adapter rule. Both apply when a device is next plugged
+  # in (or at the next boot); inside the installer udev isn't running, which is fine.
+  systemd-hwdb update 2>/dev/null || true
+  udevadm control --reload 2>/dev/null || true
+fi
+exit 0

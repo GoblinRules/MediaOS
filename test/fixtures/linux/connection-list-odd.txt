@@ -1,0 +1,4 @@
+MediaOS wired:142be7a3-d9fb-485d-bf09-8f7742f9f08e:802-3-ethernet:ens160:yes
+lo:876f769f-cf36-4a09-b985-2093d73ce0a0:loopback:lo:yes
+MOS probe shared:5b7d4fa3-a05d-45b2-99a4-fedc566b0c20:802-3-ethernet::no
+MOS probe\: a\\b c:a47a6e7e-6a36-40af-bb26-a05c7fa86341:802-3-ethernet::no

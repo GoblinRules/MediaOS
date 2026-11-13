@@ -1,0 +1,179 @@
+/* Weather chip beside the clock. Movement is slow on purpose: it sits on screen all evening. */
+
+.weather {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text);
+  font-size: 1.6rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  animation: wx-appear 600ms ease-out;
+}
+.weather-stale {
+  opacity: 0.6;
+}
+.weather-label {
+  color: var(--muted);
+  font-size: 1.25rem;
+  white-space: nowrap;
+}
+.wx-icon {
+  width: 3rem;
+  height: 3rem;
+  flex: none;
+  overflow: visible;
+}
+
+.wx-sun circle {
+  fill: #ffc94a;
+}
+.wx-rays line {
+  stroke: #ffc94a;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.wx-rays {
+  transform-box: view-box;
+  transform-origin: 24px 24px;
+  animation: wx-spin 60s linear infinite;
+}
+.wx-partly .wx-rays {
+  transform-origin: 17px 16px;
+}
+.wx-moon path {
+  fill: #e4e9f2;
+}
+.wx-star {
+  fill: #e4e9f2;
+  animation: wx-twinkle 4s ease-in-out infinite;
+}
+.wx-cloud {
+  fill: #d5dbe5;
+}
+.wx-cloud-dark {
+  fill: #8f9aad;
+}
+.wx-cloudy .wx-cloud-drift:first-child .wx-cloud {
+  fill: #a9b2c2;
+}
+.wx-cloud-drift {
+  animation: wx-drift 9s ease-in-out infinite alternate;
+}
+.wx-cloud-drift + .wx-cloud-drift {
+  animation-duration: 12s;
+  animation-direction: alternate-reverse;
+}
+.wx-drop {
+  stroke: #6fb3ff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  animation: wx-fall 1.4s linear infinite;
+}
+.wx-drizzle .wx-drop {
+  stroke-width: 1.6;
+  animation-duration: 2.1s;
+}
+.wx-flake {
+  fill: #ffffff;
+  animation: wx-snow 3.3s linear infinite;
+}
+.wx-bolt {
+  fill: #ffd84a;
+  animation: wx-flash 6s ease-out infinite;
+}
+.wx-fog-line {
+  stroke: #b9c1cf;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  animation: wx-slide 7s ease-in-out infinite alternate;
+}
+
+@keyframes wx-appear {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes wx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes wx-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes wx-drift {
+  from {
+    transform: translateX(-1.5px);
+  }
+  to {
+    transform: translateX(1.5px);
+  }
+}
+@keyframes wx-fall {
+  0% {
+    transform: translateY(-3px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(7px);
+    opacity: 0;
+  }
+}
+@keyframes wx-snow {
+  0% {
+    transform: translate(0, -3px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(1.5px, 3px);
+  }
+  100% {
+    transform: translate(-1px, 9px);
+    opacity: 0;
+  }
+}
+@keyframes wx-flash {
+  0%,
+  86%,
+  100% {
+    opacity: 0.6;
+  }
+  88% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 0.5;
+  }
+  92% {
+    opacity: 1;
+  }
+}
+@keyframes wx-slide {
+  from {
+    transform: translateX(-2px);
+  }
+  to {
+    transform: translateX(2px);
+  }
+}
+
+/* Reduced motion: a still picture, with every drop, flake and star where it can be seen. */
+@media (prefers-reduced-motion: reduce) {
+  .weather,
+  .weather * {
+    animation: none !important;
+  }
+}

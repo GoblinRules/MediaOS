@@ -1,0 +1,8 @@
+{
+  "PlaySessionId": "session-harbour",
+  "MediaSources": [{
+    "Id": "media-harbour", "DefaultAudioStreamIndex": 2, "DefaultSubtitleStreamIndex": 4,
+    "SupportsDirectPlay": true, "SupportsDirectStream": true, "SupportsTranscoding": true,
+    "TranscodingUrl": "/Videos/film-harbour/master.m3u8?mediaSourceId=media-harbour&playSessionId=session-harbour"
+  }]
+}

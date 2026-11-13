@@ -1,0 +1,3 @@
+# MediaOS: a Pulse-Eight USB-CEC adapter shows up as a serial port. Start inputattach on it so the kernel's
+# pulse8-cec driver takes it over and it appears as /dev/cecN (TV remote buttons, TV on/off).
+SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", ATTRS{idVendor}=="2548", ATTRS{idProduct}=="1002", TAG+="systemd", ENV{SYSTEMD_WANTS}+="mediaos-pulse8-cec@%k.service"

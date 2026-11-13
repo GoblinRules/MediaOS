@@ -1,0 +1,8 @@
+// MediaOS: Debian's own updates (security fixes and point releases) install themselves each day through
+// unattended-upgrades, and the box never restarts for them.
+// MediaOS itself is updated by /usr/libexec/mediaos/update (Settings > System, or overnight), not from here. Google
+// Chrome isn't updated by either: a MediaOS release brings a newer Chrome, once tested, by requiring it.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+Unattended-Upgrade::Automatic-Reboot "false";

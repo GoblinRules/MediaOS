@@ -1,0 +1,10 @@
+[Unit]
+Description=Go back to the previous MediaOS
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/mediaos/update rollback
+StateDirectory=mediaos-update
+StateDirectoryMode=0755
+TimeoutStartSec=900
+Nice=10

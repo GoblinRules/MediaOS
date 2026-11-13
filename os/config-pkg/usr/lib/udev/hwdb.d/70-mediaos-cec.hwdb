@@ -1,0 +1,14 @@
+# MediaOS: TV-remote (HDMI-CEC) buttons as ordinary keys. The kernel's rc-cec keymap gives some buttons key codes
+# that the keyboard layout has no meaning for (OK, Exit), so the home screen would never see them.
+# Scancodes are CEC "user control" codes. Matches every CEC remote (input bus 0x1e).
+evdev:input:b001E*
+ KEYBOARD_KEY_00=enter
+ KEYBOARD_KEY_0d=esc
+ KEYBOARD_KEY_09=homepage
+ KEYBOARD_KEY_0a=compose
+ KEYBOARD_KEY_0b=compose
+ KEYBOARD_KEY_11=compose
+ KEYBOARD_KEY_35=compose
+ KEYBOARD_KEY_4b=nextsong
+ KEYBOARD_KEY_4c=previoussong
+ KEYBOARD_KEY_72=homepage

@@ -1,0 +1,401 @@
+{
+  "movie": {
+    "ratingKey": "101",
+    "type": "movie",
+    "title": "The Lantern Keeper",
+    "year": 2024,
+    "duration": 7200500,
+    "viewOffset": 1200500,
+    "viewCount": 1,
+    "lastViewedAt": 1760000000,
+    "addedAt": 1750000000,
+    "originallyAvailableAt": "2024-04-12",
+    "summary": "A keeper returns to a quiet island.",
+    "tagline": "One light remains.",
+    "contentRating": "12",
+    "audienceRating": 8.3,
+    "rating": 7.2,
+    "Genre": [
+      {
+        "tag": "Drama"
+      },
+      {
+        "tag": "Mystery"
+      }
+    ],
+    "Guid": [
+      {
+        "id": "imdb://tt9876543"
+      },
+      {
+        "id": "tmdb://9876"
+      },
+      {
+        "id": "tvdb://321"
+      }
+    ],
+    "thumb": "/library/metadata/101/thumb/1700",
+    "art": "/library/metadata/101/art/1700",
+    "Image": [
+      {
+        "type": "clearLogo",
+        "url": "/library/metadata/101/clearLogo/1700"
+      }
+    ],
+    "Role": [
+      {
+        "tag": "Nora Vale",
+        "role": "The Keeper"
+      }
+    ],
+    "Director": [
+      {
+        "tag": "Elliot Shore"
+      }
+    ],
+    "studio": "Harbour Pictures",
+    "Media": [
+      {
+        "videoResolution": "4k",
+        "videoCodec": "hevc",
+        "Part": [
+          {
+            "id": 501,
+            "key": "/library/parts/501/1700/file.mkv",
+            "Stream": [
+              {
+                "id": 600,
+                "streamType": 1,
+                "codec": "hevc",
+                "colorTrc": "smpte2084"
+              },
+              {
+                "id": 610,
+                "streamType": 2,
+                "codec": "eac3",
+                "languageCode": "eng",
+                "displayTitle": "English · E-AC3 5.1",
+                "channels": 6,
+                "selected": true
+              },
+              {
+                "id": 611,
+                "streamType": 2,
+                "codec": "aac",
+                "languageCode": "fra",
+                "extendedDisplayTitle": "French · AAC stereo"
+              },
+              {
+                "id": 620,
+                "streamType": 3,
+                "codec": "srt",
+                "languageCode": "eng",
+                "key": "/library/streams/620",
+                "displayTitle": "English · SRT",
+                "default": 1
+              },
+              {
+                "id": 621,
+                "streamType": 3,
+                "codec": "pgs",
+                "languageCode": "eng",
+                "displayTitle": "English · PGS",
+                "forced": 1
+              },
+              {
+                "id": 622,
+                "streamType": 3,
+                "codec": "srt",
+                "languageCode": "fra",
+                "key": "/library/streams/622",
+                "displayTitle": "French · SRT"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "show": {
+    "ratingKey": "201",
+    "type": "show",
+    "title": "Tides of Tomorrow",
+    "leafCount": 10,
+    "viewedLeafCount": 4,
+    "thumb": "/library/metadata/201/thumb/1700",
+    "art": "/library/metadata/201/art/1700",
+    "addedAt": 1751000000,
+    "OnDeck": {
+      "Metadata": [
+        {
+          "ratingKey": "205",
+          "type": "episode",
+          "title": "Across the Sound",
+          "grandparentRatingKey": "201",
+          "grandparentTitle": "Tides of Tomorrow",
+          "parentRatingKey": "202",
+          "parentIndex": 2,
+          "index": 5,
+          "duration": 2700000,
+          "viewOffset": 0,
+          "viewCount": 0,
+          "thumb": "/library/metadata/205/thumb/1700",
+          "grandparentThumb": "/library/metadata/201/thumb/1700",
+          "grandparentArt": "/library/metadata/201/art/1700",
+          "Media": [
+            {
+              "videoResolution": "4k",
+              "videoCodec": "hevc",
+              "Part": [
+                {
+                  "id": 501,
+                  "key": "/library/parts/501/1700/file.mkv",
+                  "Stream": [
+                    {
+                      "id": 600,
+                      "streamType": 1,
+                      "codec": "hevc",
+                      "colorTrc": "smpte2084"
+                    },
+                    {
+                      "id": 610,
+                      "streamType": 2,
+                      "codec": "eac3",
+                      "languageCode": "eng",
+                      "displayTitle": "English · E-AC3 5.1",
+                      "channels": 6,
+                      "selected": true
+                    },
+                    {
+                      "id": 611,
+                      "streamType": 2,
+                      "codec": "aac",
+                      "languageCode": "fra",
+                      "extendedDisplayTitle": "French · AAC stereo"
+                    },
+                    {
+                      "id": 620,
+                      "streamType": 3,
+                      "codec": "srt",
+                      "languageCode": "eng",
+                      "key": "/library/streams/620",
+                      "displayTitle": "English · SRT",
+                      "default": 1
+                    },
+                    {
+                      "id": 621,
+                      "streamType": 3,
+                      "codec": "pgs",
+                      "languageCode": "eng",
+                      "displayTitle": "English · PGS",
+                      "forced": 1
+                    },
+                    {
+                      "id": 622,
+                      "streamType": 3,
+                      "codec": "srt",
+                      "languageCode": "fra",
+                      "key": "/library/streams/622",
+                      "displayTitle": "French · SRT"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "season": {
+    "ratingKey": "202",
+    "type": "season",
+    "title": "Season 2",
+    "index": 2,
+    "parentRatingKey": "201",
+    "parentThumb": "/library/metadata/201/thumb/1700",
+    "leafCount": 5,
+    "viewedLeafCount": 5
+  },
+  "episode": {
+    "ratingKey": "205",
+    "type": "episode",
+    "title": "Across the Sound",
+    "grandparentRatingKey": "201",
+    "grandparentTitle": "Tides of Tomorrow",
+    "parentRatingKey": "202",
+    "parentIndex": 2,
+    "index": 5,
+    "duration": 2700000,
+    "viewOffset": 0,
+    "viewCount": 0,
+    "thumb": "/library/metadata/205/thumb/1700",
+    "grandparentThumb": "/library/metadata/201/thumb/1700",
+    "grandparentArt": "/library/metadata/201/art/1700",
+    "Media": [
+      {
+        "videoResolution": "4k",
+        "videoCodec": "hevc",
+        "Part": [
+          {
+            "id": 501,
+            "key": "/library/parts/501/1700/file.mkv",
+            "Stream": [
+              {
+                "id": 600,
+                "streamType": 1,
+                "codec": "hevc",
+                "colorTrc": "smpte2084"
+              },
+              {
+                "id": 610,
+                "streamType": 2,
+                "codec": "eac3",
+                "languageCode": "eng",
+                "displayTitle": "English · E-AC3 5.1",
+                "channels": 6,
+                "selected": true
+              },
+              {
+                "id": 611,
+                "streamType": 2,
+                "codec": "aac",
+                "languageCode": "fra",
+                "extendedDisplayTitle": "French · AAC stereo"
+              },
+              {
+                "id": 620,
+                "streamType": 3,
+                "codec": "srt",
+                "languageCode": "eng",
+                "key": "/library/streams/620",
+                "displayTitle": "English · SRT",
+                "default": 1
+              },
+              {
+                "id": 621,
+                "streamType": 3,
+                "codec": "pgs",
+                "languageCode": "eng",
+                "displayTitle": "English · PGS",
+                "forced": 1
+              },
+              {
+                "id": 622,
+                "streamType": 3,
+                "codec": "srt",
+                "languageCode": "fra",
+                "key": "/library/streams/622",
+                "displayTitle": "French · SRT"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "next": {
+    "ratingKey": "206",
+    "type": "episode",
+    "title": "The Last Ferry",
+    "grandparentRatingKey": "201",
+    "grandparentTitle": "Tides of Tomorrow",
+    "parentRatingKey": "202",
+    "parentIndex": 2,
+    "index": 6,
+    "duration": 2700000,
+    "viewOffset": 0,
+    "viewCount": 0,
+    "thumb": "/library/metadata/205/thumb/1700",
+    "grandparentThumb": "/library/metadata/201/thumb/1700",
+    "grandparentArt": "/library/metadata/201/art/1700",
+    "Media": [
+      {
+        "videoResolution": "4k",
+        "videoCodec": "hevc",
+        "Part": [
+          {
+            "id": 501,
+            "key": "/library/parts/501/1700/file.mkv",
+            "Stream": [
+              {
+                "id": 600,
+                "streamType": 1,
+                "codec": "hevc",
+                "colorTrc": "smpte2084"
+              },
+              {
+                "id": 610,
+                "streamType": 2,
+                "codec": "eac3",
+                "languageCode": "eng",
+                "displayTitle": "English · E-AC3 5.1",
+                "channels": 6,
+                "selected": true
+              },
+              {
+                "id": 611,
+                "streamType": 2,
+                "codec": "aac",
+                "languageCode": "fra",
+                "extendedDisplayTitle": "French · AAC stereo"
+              },
+              {
+                "id": 620,
+                "streamType": 3,
+                "codec": "srt",
+                "languageCode": "eng",
+                "key": "/library/streams/620",
+                "displayTitle": "English · SRT",
+                "default": 1
+              },
+              {
+                "id": 621,
+                "streamType": 3,
+                "codec": "pgs",
+                "languageCode": "eng",
+                "displayTitle": "English · PGS",
+                "forced": 1
+              },
+              {
+                "id": 622,
+                "streamType": 3,
+                "codec": "srt",
+                "languageCode": "fra",
+                "key": "/library/streams/622",
+                "displayTitle": "French · SRT"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "clip": {
+    "ratingKey": "301",
+    "type": "clip",
+    "title": "Island Sketches"
+  },
+  "libraries": [
+    {
+      "key": "1",
+      "type": "movie",
+      "title": "Films"
+    },
+    {
+      "key": "2",
+      "type": "show",
+      "title": "Television"
+    },
+    {
+      "key": "3",
+      "type": "artist",
+      "title": "Music"
+    },
+    {
+      "key": "4",
+      "type": "photo",
+      "title": "Photos"
+    }
+  ]
+}

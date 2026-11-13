@@ -1,0 +1,29 @@
+#!/bin/sh
+# Sends one command to the MediaOS home screen.
+#   mediaos-ctl home | back | recover | ping
+#   mediaos-ctl press <action>     e.g. press select, press down, press playPause
+#   mediaos-ctl home-down / home-up (used by sway for the Home key)
+set -eu
+
+if [ "$#" -lt 1 ]; then
+  echo "Usage: mediaos-ctl home|back|recover|ping|press <action>" >&2
+  exit 2
+fi
+
+runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+socket="${MEDIAOS_CONTROL_SOCKET:-$runtime/mediaos/ctl.sock}"
+
+if [ ! -S "$socket" ]; then
+  echo "MediaOS isn't running for this user (no control socket at $socket)." >&2
+  exit 1
+fi
+
+reply=$(printf '%s\n' "$*" | socat -t 2 - "UNIX-CONNECT:$socket") || {
+  echo "Couldn't reach MediaOS." >&2
+  exit 1
+}
+
+if [ "$reply" != "ok" ]; then
+  echo "MediaOS didn't recognise: $*" >&2
+  exit 1
+fi

@@ -1,0 +1,37 @@
+// MediaOS: allow the TV user power controls, the time zone, only the seven network changes listed below and starting
+// the four update units, without a password prompt. settings.modify.global-dns and every other network action stay
+// refused by this rule, as does stopping, restarting or changing any unit.
+polkit.addRule(function (action, subject) {
+  if (subject.user !== "mediaos") return polkit.Result.NOT_HANDLED;
+  var allowed = [
+    "org.freedesktop.login1.reboot",
+    "org.freedesktop.login1.reboot-multiple-sessions",
+    "org.freedesktop.login1.power-off",
+    "org.freedesktop.login1.power-off-multiple-sessions",
+    "org.freedesktop.login1.suspend",
+    "org.freedesktop.login1.suspend-multiple-sessions",
+    "org.freedesktop.timedate1.set-timezone",
+  ];
+  if (allowed.indexOf(action.id) >= 0) return polkit.Result.YES;
+  var nm = [
+    "network-control",
+    "enable-disable-network",
+    "enable-disable-wifi",
+    "wifi.scan",
+    "settings.modify.system",
+    "settings.modify.own",
+    "checkpoint-rollback",
+  ];
+  var prefix = "org.freedesktop.NetworkManager.";
+  if (action.id.indexOf(prefix) === 0 && nm.indexOf(action.id.slice(prefix.length)) >= 0) return polkit.Result.YES;
+  // Updates: start (only start) the four MediaOS update units, which run /usr/libexec/mediaos/update as root.
+  var updateUnits = [
+    "mediaos-update-check.service",
+    "mediaos-update-apply.service",
+    "mediaos-update-auto.service",
+    "mediaos-update-rollback.service",
+  ];
+  if (action.id === "org.freedesktop.systemd1.manage-units" && action.lookup("verb") === "start" &&
+      updateUnits.indexOf(action.lookup("unit")) >= 0) return polkit.Result.YES;
+  return polkit.Result.NOT_HANDLED;
+});

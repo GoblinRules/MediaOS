@@ -1,0 +1,14 @@
+[Unit]
+Description=Hand cable interfaces to NetworkManager
+DefaultDependencies=no
+After=local-fs.target
+Before=networking.service NetworkManager.service network-pre.target
+Wants=network-pre.target
+ConditionPathExists=!/var/lib/mediaos/net-handover.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/mediaos/net-handover
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Install a MediaOS update overnight
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/mediaos/update auto
+StateDirectory=mediaos-update
+StateDirectoryMode=0755
+TimeoutStartSec=1800
+Nice=10

@@ -1,0 +1,9 @@
+connection.id:MediaOS wired
+ipv4.method:auto
+ipv4.addresses:
+ipv4.gateway:
+ipv4.dns:
+ipv4.ignore-auto-dns:no
+ipv4.dad-timeout:-1
+ipv6.dns:
+ipv6.ignore-auto-dns:no

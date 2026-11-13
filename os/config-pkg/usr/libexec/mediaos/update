@@ -1,0 +1,161 @@
+#!/bin/sh
+# MediaOS updates. Runs as root from mediaos-update-<action>.service; the TV user may start those units and nothing
+# else (see the polkit rule), so this script trusts no input except its one word.
+#   update check     Ask the MediaOS package server whether a newer MediaOS is out.
+#   update apply     Install it (with any new Debian packages it needs), keep the old packages, then restart the box.
+#   update auto      The same as apply, but leave alone a version the owner went back from.
+#   update rollback  Reinstall the previous MediaOS packages, then restart the box.
+# The outcome goes to /var/lib/mediaos-update/state.json, which the home screen reads:
+#   { current, available, previous, checkedAt, skip, lastRun: { action, ok, error, at } }
+# Error words: not-set-up, offline, untrusted, server, busy, no-space, up-to-date, install-failed, no-previous, failed.
+set -u
+umask 022
+
+action=${1:-}
+case "$action" in check|apply|auto|rollback) ;; *) echo "usage: update check|apply|auto|rollback" >&2; exit 2 ;; esac
+
+list=/etc/apt/sources.list.d/mediaos.sources
+dir=/var/lib/mediaos-update
+pkgs=$dir/packages
+state=$dir/state.json
+log=$dir/last.log
+export DEBIAN_FRONTEND=noninteractive
+# Wait for unattended-upgrades or another apt run for up to two minutes before giving up as "busy".
+apt_opts="-q -o DPkg::Lock::Timeout=120"
+install_opts="-y --no-remove -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+
+mkdir -p "$pkgs/current" "$pkgs/previous"
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# Merge a jq filter into state.json (atomically), always refreshing current and previous from what is on disk.
+write_state() { # jq filter [jq --arg pairs]
+  filter=$1
+  shift
+  current=$(dpkg-query -W -f '${Version}' mediaos-shell 2>/dev/null || true)
+  previous=$(deb_version "$pkgs/previous")
+  tmp=$(mktemp "$dir/state.XXXXXX") || return 1
+  if [ -s "$state" ] && jq -e 'type == "object"' "$state" >/dev/null 2>&1; then cat "$state"; else echo '{}'; fi |
+    jq --arg current "$current" --arg previous "$previous" "$@" \
+      'def orNull: if . == "" then null else . end;
+       .current = ($current | orNull) | .previous = ($previous | orNull) | '"$filter" > "$tmp" &&
+    chmod 0644 "$tmp" && mv -f "$tmp" "$state"
+  status=$?
+  rm -f "$tmp"
+  return $status
+}
+deb_version() { # folder -> version of the mediaos-shell package kept there, or nothing
+  for f in "$1"/mediaos-shell_*.deb; do [ -f "$f" ] && dpkg-deb -f "$f" Version && return; done
+  return 0
+}
+finish_ok() { # [extra jq filter]
+  write_state "${1:-.}"' | .lastRun = {action: $a, ok: true, error: null, at: $at}' --arg a "$action" --arg at "$(now)"
+  exit 0
+}
+fail() { # error word
+  echo "update $action failed: $1" >&2
+  write_state '.lastRun = {action: $a, ok: false, error: $e, at: $at}' --arg a "$action" --arg e "$1" --arg at "$(now)"
+  exit 1
+}
+# Turn apt's output into one error word. Order matters: a full disk or a held lock can also mention a download.
+classify() {
+  if grep -qE 'No space left|You don.t have enough free space' "$log"; then echo no-space
+  elif grep -qE 'Could not get lock|Unable to acquire the dpkg|Unable to lock' "$log"; then echo busy
+  elif grep -qE 'sqv|NO_PUBKEY|signature|not signed|no longer signed|EXPKEYSIG|KEYEXPIRED' "$log"; then echo untrusted
+  elif grep -qE 'Could not (resolve|connect)|Unable to connect|Temporary failure|Connection failed|timed out' "$log" ||
+    grep -qE 'Network is unreachable|No route to host' "$log"; then echo offline
+  elif grep -qE '404|403|Not Found|Forbidden|Hash Sum mismatch|File has unexpected size' "$log"; then echo server
+  else echo "$1"
+  fi
+}
+
+# One update action at a time. A second one leaves state.json alone; the home screen notices that nothing was written.
+exec 9>"$dir/lock"
+flock -n 9 || { echo "Another update action is running" >&2; exit 75; }
+
+# Refresh only the MediaOS package list (a slow Debian mirror shouldn't make MediaOS look offline), then compare.
+check() {
+  [ -f "$list" ] || fail not-set-up
+  # shellcheck disable=SC2086
+  apt-get update $apt_opts --error-on=any -o Dir::Etc::SourceList="$list" -o Dir::Etc::SourceParts=/nonexistent \
+    -o APT::Get::List-Cleanup=0 > "$log" 2>&1 || fail "$(classify failed)"
+  installed=$(dpkg-query -W -f '${Version}' mediaos-shell 2>/dev/null || true)
+  candidate=$(apt-cache policy mediaos-shell | awk '$1 == "Candidate:" { print $2 }')
+  available=
+  if [ -n "$candidate" ] && [ "$candidate" != "(none)" ] && dpkg --compare-versions "$candidate" gt "$installed"; then
+    available=$candidate
+  fi
+  write_state '.available = ($v | orNull) | .checkedAt = $at' --arg v "$available" --arg at "$(now)"
+}
+
+install_available() {
+  [ -n "$available" ] || fail up-to-date
+  free=$(df -Pk "$dir" | awk 'NR == 2 { print $4 }')
+  [ "${free:-0}" -ge 1048576 ] || fail no-space
+  # The whole package list this time: the new MediaOS may need Debian packages the box hasn't got yet. Debian's
+  # mirrors failing here is not fatal by itself; the install below says whether anything was missing.
+  # shellcheck disable=SC2086
+  apt-get update $apt_opts >> "$log" 2>&1
+  next=$pkgs/next
+  rm -rf "$next"
+  mkdir -p "$next/partial"
+  # Download everything first, into a folder of our own, so a dropped connection never leaves a half-installed box.
+  # shellcheck disable=SC2086
+  apt-get install $apt_opts $install_opts --download-only -o Dir::Cache::Archives="$next" \
+    "mediaos-shell=$available" "mediaos-config=$available" >> "$log" 2>&1 || { rm -rf "$next"; fail "$(classify failed)"; }
+  # shellcheck disable=SC2086
+  if ! apt-get install $apt_opts $install_opts -o Dir::Cache::Archives="$next" \
+      "mediaos-shell=$available" "mediaos-config=$available" >> "$log" 2>&1; then
+    reason=$(classify install-failed)
+    # Put back the packages the box was running, if we have them, so it still starts.
+    if [ -n "$(deb_version "$pkgs/current")" ]; then
+      dpkg --configure -a >> "$log" 2>&1
+      # shellcheck disable=SC2086
+      apt-get install $apt_opts $install_opts --allow-downgrades "$pkgs"/current/mediaos-shell_*.deb \
+        "$pkgs"/current/mediaos-config_*.deb >> "$log" 2>&1
+    fi
+    rm -rf "$next"
+    fail "$reason"
+  fi
+  # Keep only the two MediaOS packages of the new version; the old current ones become "previous".
+  find "$next" -mindepth 1 ! -name 'mediaos-shell_*.deb' ! -name 'mediaos-config_*.deb' -exec rm -rf {} +
+  rm -rf "$pkgs/previous"
+  mv "$pkgs/current" "$pkgs/previous"
+  mv "$next" "$pkgs/current"
+  write_state '.available = null | .skip = null | .lastRun = {action: $a, ok: true, error: null, at: $at}' \
+    --arg a "$action" --arg at "$(now)"
+  systemctl --no-block reboot
+  exit 0
+}
+
+case "$action" in
+  check)
+    check
+    finish_ok
+    ;;
+  apply)
+    check
+    install_available
+    ;;
+  auto)
+    check
+    skip=$(jq -r '.skip // empty' "$state" 2>/dev/null || true)
+    if [ -z "$available" ] || [ "$available" = "$skip" ]; then finish_ok; fi
+    install_available
+    ;;
+  rollback)
+    : > "$log"
+    from=$(dpkg-query -W -f '${Version}' mediaos-shell 2>/dev/null || true)
+    [ -n "$(deb_version "$pkgs/previous")" ] && [ -f "$(echo "$pkgs"/previous/mediaos-config_*.deb)" ] || fail no-previous
+    # shellcheck disable=SC2086
+    apt-get install $apt_opts $install_opts --allow-downgrades "$pkgs"/previous/mediaos-shell_*.deb \
+      "$pkgs"/previous/mediaos-config_*.deb >> "$log" 2>&1 || fail "$(classify install-failed)"
+    # The version we went back from is dropped (a check offers it again) and automatic updates leave it alone.
+    rm -rf "$pkgs/current"
+    mv "$pkgs/previous" "$pkgs/current"
+    mkdir -p "$pkgs/previous"
+    write_state '.skip = ($from | orNull) | .lastRun = {action: $a, ok: true, error: null, at: $at}' \
+      --arg from "$from" --arg a "$action" --arg at "$(now)"
+    systemctl --no-block reboot
+    exit 0
+    ;;
+esac

@@ -1,0 +1,12 @@
+Package: mediaos-config
+Version: @VERSION@
+Architecture: all
+Maintainer: MediaOS <mediaos@localhost>
+Section: misc
+Priority: optional
+Depends: mediaos-shell (= @VERSION@), greetd, sway, mpv, socat, systemd, polkitd, jq, fonts-dejavu-core, fonts-inter,
+ pipewire-pulse, wireplumber, network-manager, bluez, python3-evdev, v4l-utils, inputattach, unattended-upgrades
+Recommends: intel-media-va-driver-non-free, firmware-intel-graphics, firmware-amd-graphics
+Description: MediaOS TV session settings
+ Signs the TV user straight into a full-screen sway session that runs the MediaOS home screen, with the Home key
+ caught by sway, the shell restarted if it crashes, and Chrome and mpv set up for a TV.

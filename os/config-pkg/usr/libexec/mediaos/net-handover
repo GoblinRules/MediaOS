@@ -1,0 +1,149 @@
+#!/bin/sh
+# Hand ifupdown's cable interfaces to NetworkManager, before either service starts.
+set -eu
+
+root=${MEDIAOS_ROOT:-}
+interfaces="$root/etc/network/interfaces"
+connections="$root/etc/NetworkManager/system-connections"
+temp=
+trap 'if [ -n "$temp" ]; then rm -f "$temp"; fi' 0
+trap 'exit 1' HUP INT TERM
+
+mkdir -p "$connections"
+found=false
+for profile in "$connections"/*; do
+  [ -f "$profile" ] || continue
+  if grep -qx 'id=MediaOS wired' "$profile"; then
+    found=true
+    break
+  else
+    result=$?
+    [ "$result" -eq 1 ] || exit "$result"
+  fi
+done
+
+if [ "$found" = false ]; then
+  if [ "${MEDIAOS_UUID+x}" = x ]; then
+    uuid=$MEDIAOS_UUID
+  else
+    uuid=$(cat "$root/proc/sys/kernel/random/uuid")
+  fi
+  case "$uuid" in
+    *[!0-9a-fA-F-]*) echo "Cannot create cable profile: invalid UUID."; exit 1 ;;
+  esac
+  if ! printf '%s\n' "$uuid" | grep -Eq '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'; then
+    echo "Cannot create cable profile: invalid UUID."
+    exit 1
+  fi
+  umask 077
+  temp=$(mktemp "$connections/.mediaos-wired-XXXXXX")
+  cat > "$temp" <<EOF
+[connection]
+id=MediaOS wired
+uuid=$uuid
+type=ethernet
+autoconnect=true
+autoconnect-priority=10
+[ethernet]
+[ipv4]
+method=auto
+dhcp-client-id=mac
+[ipv6]
+method=auto
+EOF
+  # This service runs as root, so the new temporary file is already owned by root.
+  chmod 0600 "$temp"
+  mv "$temp" "$connections/mediaos-wired.nmconnection"
+  temp=
+  echo "Created the MediaOS wired cable profile."
+fi
+
+# Discover Wi-Fi across the complete default include set before rewriting any file.
+set --
+if [ -f "$interfaces" ]; then set -- "$interfaces"; fi
+for file in "$root/etc/network/interfaces.d/"*; do
+  [ -f "$file" ] || continue
+  set -- "$@" "$file"
+done
+
+if [ "$#" -gt 0 ]; then
+  wifi=$(awk '
+    function header(word) {
+      return word ~ /^(iface|mapping|auto|source|source-directory)$/ || word ~ /^allow-/
+    }
+    FNR == 1 { current = "" }
+    /^[ \t]*($|#)/ { next }
+    {
+      if (header($1)) current = ($1 == "iface" ? $2 : "")
+      if (current != "" && $1 ~ /^(wpa-ssid|wpa-conf|wireless-essid)$/) wifi[current] = 1
+    }
+    END { for (name in wifi) print name }
+  ' "$@")
+  for name in $wifi; do echo "Leaving Wi-Fi interface $name with ifupdown."; done
+fi
+
+for file do
+  # Dotfiles are never read by the default interfaces.d glob, even after a power cut.
+  temp=$(mktemp "$(dirname "$file")/.mediaos-XXXXXX")
+  MEDIAOS_INTERFACES_TEMP="$temp" awk -v wifi_names="$wifi" '
+    function header(word) {
+      return word ~ /^(iface|mapping|auto|source|source-directory)$/ || word ~ /^allow-/
+    }
+    BEGIN {
+      count = split(wifi_names, names, "\n")
+      for (i = 1; i <= count; i++) wifi[names[i]] = 1
+    }
+    {
+      line = $0
+      if ($0 !~ /^[ \t]*($|#)/) {
+        if (header($1)) cable = 0
+        if ($1 == "iface") {
+          cable = ($2 != "lo" && !wifi[$2])
+          if (cable) line = "#mediaos# " line
+        } else if ($1 == "auto" || $1 ~ /^allow-/) {
+          other = 0
+          keep = ""
+          for (i = 2; i <= NF && $i !~ /^#/; i++) {
+            if ($i == "lo" || wifi[$i]) keep = keep " " $i
+            else other = 1
+          }
+          if (other) {
+            if (keep != "") print $1 keep > ENVIRON["MEDIAOS_INTERFACES_TEMP"]
+            line = "#mediaos# " line
+          }
+        } else if ($1 == "source" || $1 == "source-directory") {
+          for (i = 2; i <= NF && $i !~ /^#/; i++) {
+            if (($1 == "source" && $i ~ /^\/etc\/network\/interfaces[.]d\/[^.\/][^\/]*$/) ||
+                ($1 == "source-directory" && $i == "/etc/network/interfaces.d")) continue
+            if (!logged[$i]++) print "not handed over: " $i
+          }
+        } else if (cable) line = "#mediaos# " line
+      }
+      print line > ENVIRON["MEDIAOS_INTERFACES_TEMP"]
+    }
+  ' "$file"
+  if cmp -s "$file" "$temp"; then
+    rm -f "$temp"
+  else
+    result=$?
+    [ "$result" -eq 1 ] || exit "$result"
+    if [ "$file" = "$interfaces" ]; then
+      backup="$interfaces.mediaos-bak"
+    else
+      mkdir -p "$root/var/lib/mediaos/ifupdown-backup"
+      backup="$root/var/lib/mediaos/ifupdown-backup/$(basename "$file")"
+    fi
+    if [ ! -e "$backup" ]; then
+      cp -p "$file" "$backup"
+      echo "Backed up ${file#"$root"}."
+    fi
+    chmod --reference="$file" "$temp"
+    mv "$temp" "$file"
+    echo "Handed cable interfaces to NetworkManager."
+  fi
+  temp=
+done
+
+mkdir -p "$root/var/lib/mediaos"
+echo "Network hand-over complete."
+touch "$root/var/lib/mediaos/net-handover.done"

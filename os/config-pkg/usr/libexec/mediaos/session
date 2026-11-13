@@ -1,0 +1,26 @@
+#!/bin/sh
+# The MediaOS TV session. greetd starts this as the mediaos user at boot (and again if it ever ends).
+# It runs sway with the MediaOS config; sway then starts the shell as a systemd user service, so a crashed shell
+# is restarted within a second.
+
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=sway
+unset DISPLAY
+
+# A virtual machine has no real graphics card: draw in software and decode video in software.
+if systemd-detect-virt --vm --quiet; then
+  export WLR_RENDERER=pixman
+  export WLR_NO_HARDWARE_CURSORS=1
+  export MEDIAOS_SOFTWARE_VIDEO=1
+fi
+
+# Start clean: forget earlier crash counts and any shell left from a previous session.
+systemctl --user stop mediaos-shell.service 2>/dev/null
+systemctl --user reset-failed mediaos-shell.service 2>/dev/null
+
+systemd-cat --identifier=sway sway --config /etc/mediaos/sway.conf
+status=$?
+
+# sway has gone, so the shell (and any app or player it started) has nothing to draw on.
+systemctl --user stop mediaos-shell.service 2>/dev/null
+exit "$status"
