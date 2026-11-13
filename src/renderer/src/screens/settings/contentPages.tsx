@@ -537,12 +537,13 @@ function UpdateRows({ k }: { k: (n: string) => string }): ReactNode {
     ? RUNNING[running]
     : !u ? undefined
     : !u.configured ? 'Not set up'
-    : u.available ? `MediaOS ${u.available} is ready`
+    // A failed check wins over a version found by an earlier one, or the row would look fine after a failure.
     : failed?.action === 'check' ? "Couldn't check"
+    : u.available ? `MediaOS ${u.available} is ready`
     : checked ? 'Up to date' : undefined
   const checkDetail = !u ? undefined
     : !u.configured ? `Updates aren't set up on this box. It has MediaOS ${u.current}.`
-    : `This box has MediaOS ${u.current}.${checked ? ` Last checked ${checked}.` : ''}`
+    : failedText('check') ?? `This box has MediaOS ${u.current}.${checked ? ` Last checked ${checked}.` : ''}`
   const overnightFailed = failed?.action === 'auto'
     ? `The overnight update ${whenInSentence(failed.at)} didn't work. ${failed.error ?? ''}`.trimEnd()
     : undefined
@@ -561,7 +562,7 @@ function UpdateRows({ k }: { k: (n: string) => string }): ReactNode {
             onSelect={busy ? undefined : () => void check()}
             testId="updates-check"
           />
-          {u.available && (
+          {u.configured && u.available && (
             <SettingRow
               focusKey={k('updates-install')}
               icon="download"

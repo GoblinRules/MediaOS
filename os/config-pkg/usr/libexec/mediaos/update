@@ -53,8 +53,8 @@ write_state() { # jq filter [jq --arg pairs]
   rm -f "$tmp"
   return $status
 }
-deb_version() { # folder -> version of the mediaos-shell package kept there, or nothing
-  for f in "$1"/mediaos-shell_*.deb; do [ -f "$f" ] && dpkg-deb -f "$f" Version && return; done
+deb_version() { # folder [package] -> version of that package (mediaos-shell by default) kept there, or nothing
+  for f in "$1/${2:-mediaos-shell}"_*.deb; do [ -f "$f" ] && dpkg-deb -f "$f" Version && return; done
   return 0
 }
 finish_ok() { # [extra jq filter]
@@ -83,10 +83,20 @@ classify() {
 # Reinstall the MediaOS packages the box was running (kept in packages/current), so it still starts.
 put_back() {
   dpkg --configure -a >> "$log" 2>&1
-  [ -n "$(deb_version "$pkgs/current")" ] || return 0
-  # shellcheck disable=SC2086
-  apt-get install $apt_opts $install_opts --allow-downgrades "$pkgs"/current/mediaos-shell_*.deb \
-    "$pkgs"/current/mediaos-config_*.deb >> "$log" 2>&1
+  [ -n "$(deb_version "$pkgs/current")" ] && [ -n "$(deb_version "$pkgs/current" mediaos-config)" ] || return 0
+  # Plain dpkg, not apt: these exact files were installed and working before, so there is nothing to resolve, and
+  # after a power cut apt gets it wrong (seen on a VM): it keeps a newer package left unpacked ("unmet dependencies"),
+  # skips one left "half-installed" at the old version ("already the newest version"), and its --reinstall fails on
+  # the config package. Wait up to two minutes if another apt run holds the lock, as the apt calls do.
+  tries=0
+  until dpkg --force-confdef --force-confold -i "$pkgs"/current/mediaos-shell_*.deb \
+      "$pkgs"/current/mediaos-config_*.deb >> "$log" 2>&1; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 12 ] && tail -n 5 "$log" | grep -q 'lock' || return 1
+    sleep 10
+  done
+  # Finish anything else the cut-short install left half done, such as a new Debian package it brought in.
+  dpkg --configure -a >> "$log" 2>&1
 }
 mark_installing() {
   echo "$action" > "$marker" && sync "$marker"

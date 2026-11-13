@@ -67,6 +67,9 @@ chmod 0755 "$root/DEBIAN/postinst" "$root/usr/bin/mediaos-ctl" "$root/usr/libexe
   "$root/usr/libexec/mediaos/net-handover" "$root/usr/libexec/mediaos/update"
 # The MediaOS update server, only when this build is given one (MEDIAOS_UPDATE_URL and its public signing key at
 # /work/update-key.asc). Without them the box says updates aren't set up.
+# No DEBIAN/conffiles on purpose: MediaOS owns every /etc file it ships, so each install, update or go-back writes
+# them afresh (a stale or hand-edited polkit rule or update source never survives an update). Updates are switched
+# off with the overnight switch in Settings, not by editing or deleting mediaos.sources.
 if [ -n "${MEDIAOS_UPDATE_URL:-}" ]; then
   [ -s /work/update-key.asc ] || { echo "MEDIAOS_UPDATE_URL needs the server's public key at /work/update-key.asc" >&2; exit 1; }
   gpg --batch --show-keys /work/update-key.asc >/dev/null || { echo "/work/update-key.asc isn't a public key" >&2; exit 1; }
