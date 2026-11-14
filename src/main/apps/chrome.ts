@@ -23,6 +23,9 @@ export function chromeArgs(
   return [`--app=${app.url}`, `--user-data-dir=${profilePath(opts.profileDir, app.id)}`, '--kiosk', '--start-fullscreen',
     '--no-first-run', '--no-default-browser-check', '--disable-session-crashed-bubble',
     '--disable-features=Translate,MediaRouter', '--autoplay-policy=no-user-gesture-required', `--class=mediaos-app-${app.id}`,
+    // Ordinary websites ignore arrow keys (they only scroll); this lets the remote's arrows move between links and buttons.
+    // TV-style apps (YouTube TV) handle the arrows themselves, so they don't get it.
+    ...(app.nav === 'pointer' ? ['--enable-spatial-navigation'] : []),
     ...(opts.extraArgs ?? []), ...(app.ua ? [`--user-agent=${app.ua}`] : []),
     ...(route.kind === 'vpn' ? [`--proxy-server=socks5://127.0.0.1:${route.port}`,
       '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1', '--disable-quic'] : ['--no-proxy-server'])]

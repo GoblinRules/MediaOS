@@ -150,6 +150,32 @@ describe('Linux shell wiring', () => {
     expect(linuxMpvArgs(false)).toEqual(['--input-vo-keyboard=yes', '--input-conf=/etc/mediaos/mpv/input.conf'])
     expect(linuxMpvArgs(true)).toContain('--hwdec=no')
   })
+  it('turns on spatial navigation for ordinary websites only, so arrows move between links instead of scrolling', () => {
+    const route = { kind: 'direct' } as const, opts = { profileDir: 'profiles', chromePath: 'chrome', extraArgs: LINUX_CHROME_ARGS }
+    const flagged = (id: string) => chromeArgs(APP_CATALOG.find((a) => a.id === id)!, opts, route).includes('--enable-spatial-navigation')
+    expect(flagged('iplayer')).toBe(true)
+    expect(flagged('netflix')).toBe(true)
+    expect(flagged('youtube')).toBe(false)
+    expect(LINUX_CHROME_ARGS).not.toContain('--enable-spatial-navigation')
+    for (const app of APP_CATALOG.filter((a) => !a.blocked)) expect(flagged(app.id)).toBe(app.nav === 'pointer')
+  })
+  it('waits for the keyboard to be put back before starting Chrome', async () => {
+    const temp = await temporary(), order: string[] = []
+    const spawn = (_file: string, _args: string[]) => {
+      order.push('spawn')
+      const child = new EventEmitter() as ChildProcess
+      Object.defineProperty(child, 'exitCode', { value: null, writable: true })
+      child.kill = () => { queueMicrotask(() => child.emit('exit', 0)); return true }
+      queueMicrotask(() => child.emit('spawn'))
+      return child
+    }
+    const host = new ChromeAppHost({ profileDir: temp.dir, chromePath: 'chrome', spawn, processes: fakeTable([]),
+      beforeLaunch: async () => { await Promise.resolve(); order.push('settle') } })
+    try {
+      await host.launch(APP_CATALOG.find((a) => a.id === 'iplayer')!, { kind: 'direct' })
+      expect(order).toEqual(['settle', 'spawn'])
+    } finally { await host.close(); await temp.dispose() }
+  })
   it('reads the Linux launch options', () => {
     const opts = readLaunchOptions({ MEDIAOS_PLATFORM: 'linux', XDG_RUNTIME_DIR: '/run/user/1000/', MEDIAOS_SOFTWARE_VIDEO: '1' }, [])
     expect(opts).toMatchObject({ platform: 'linux', controlSocket: '/run/user/1000/mediaos/ctl.sock', softwareVideo: true })

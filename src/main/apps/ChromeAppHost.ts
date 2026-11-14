@@ -16,6 +16,8 @@ export interface ChromeHostOptions {
   /** Platform flags added after the usual ones (on Linux: run as a Wayland window). */
   extraArgs?: string[]
   spawn?: (file: string, args: string[]) => ChildProcess
+  /** Runs just before Chrome starts (Linux: puts the keyboard back after phone typing). */
+  beforeLaunch?: () => Promise<void>
   clock?: Runtime
   fs?: FileSystem
   logger?: Log
@@ -43,6 +45,7 @@ export class ChromeAppHost implements AppHost {
       await this.stopStray(profile)
       await this.checkPath(profile)
       await prepareProfile(profile, this.io, this.opts.logger)
+      await this.opts.beforeLaunch?.()
       const child = (this.opts.spawn ?? ((file, argv) => spawn(file, argv, { stdio: 'ignore', windowsHide: true })))(
         this.opts.chromePath, args)
       const current = { id: app.id, child }

@@ -54,6 +54,43 @@ describe('phone key injection', () => {
     await expect(injector.key('Up')).rejects.toThrow("Couldn't type on the TV. Try again.")
     expect(execFile).toHaveBeenCalledTimes(2)
   })
+  it("puts sway's keymap back once typing stops, so new windows do not crash", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(execFile).mockImplementation((...args: unknown[]) => {
+        ;(args[3] as (error: null) => void)(null); return {} as ReturnType<typeof execFile>
+      })
+      const injector = new WtypeInjector({ display: () => 'wayland-1', repairDelayMs: 1500 })
+      await injector.key('Down'); await vi.advanceTimersByTimeAsync(1000)
+      await injector.key('Down'); await vi.advanceTimersByTimeAsync(1000)
+      expect(vi.mocked(execFile).mock.calls.map((c) => c[0])).toEqual(['wtype', 'wtype'])
+      await vi.advanceTimersByTimeAsync(600)
+      expect(execFile).toHaveBeenLastCalledWith('swaymsg', ['reload'], { timeout: 5000 }, expect.any(Function))
+      expect(execFile).toHaveBeenCalledTimes(3)
+      // Nothing typed since: no second reset, now or before a launch.
+      await injector.settle(); await vi.advanceTimersByTimeAsync(5000)
+      expect(execFile).toHaveBeenCalledTimes(3)
+      injector.dispose()
+    } finally { vi.useRealTimers() }
+  })
+  it('settle() resets straight away after typing, waits for queued keys first, and never throws', async () => {
+    const callbacks: ((error: Error | null) => void)[] = []
+    vi.mocked(execFile).mockImplementation((...args: unknown[]) => {
+      callbacks.push(args[3] as (error: Error | null) => void); return {} as ReturnType<typeof execFile>
+    })
+    const warn = vi.fn(), injector = new WtypeInjector({ display: () => 'wayland-1', logger: { ...silentLog, warn } })
+    await injector.settle()
+    expect(execFile).not.toHaveBeenCalled()
+    const key = injector.key('Right'), settled = injector.settle()
+    await Promise.resolve()
+    expect(execFile).toHaveBeenCalledTimes(1)
+    callbacks[0]!(new Error('wtype timed out')); await expect(key).rejects.toThrow("Couldn't type on the TV")
+    await vi.waitFor(() => expect(execFile).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(execFile).mock.calls[1]![0]).toBe('swaymsg')
+    callbacks[1]!(new Error('no sway')); await expect(settled).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledOnce()
+    injector.dispose()
+  })
   it('logs mock keys and only character counts for text', async () => {
     const debug = vi.fn(), injector = new LogInjector({ ...silentLog, debug })
     for (const name of Object.values(APP_PHONE_KEYS)) await injector.key(name)

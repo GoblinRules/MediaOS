@@ -9,6 +9,8 @@ Type=simple
 UMask=0077
 Environment=MEDIAOS_PLATFORM=linux
 Environment=MEDIAOS_REAL_SYSTEM=network,vpn
+# Phone typing (wtype) can leave sway's keymap in a state that crashes a starting Wayland window; put sway's own back.
+ExecStartPre=-/usr/bin/timeout 5 /usr/bin/swaymsg reload
 ExecStart=/opt/MediaOS/mediaos-shell --ozone-platform=wayland
 Restart=always
 RestartSec=1

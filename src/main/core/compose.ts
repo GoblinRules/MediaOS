@@ -139,13 +139,17 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const onKey = (key: Action): void => {
     void routeKey?.(key).catch((error: unknown) => logger.error(`The ${key} key could not be handled`, error))
   }
+  // Phone typing can leave sway's keymap in a state that crashes new windows; launches wait for it to be put back.
+  let settleKeys = async (): Promise<void> => undefined
+  const beforeLaunch = (): Promise<void> => settleKeys()
   const player = mpv
-    ? new MpvController({ ...playerOptions, processOptions: { mpvPath: mpv, extraArgs: linux ? linuxMpvArgs(!!opts.softwareVideo) : [] },
+    ? new MpvController({ ...playerOptions, processOptions: { mpvPath: mpv, extraArgs: linux ? linuxMpvArgs(!!opts.softwareVideo) : [],
+      beforeStart: beforeLaunch },
       ...(linux ? { onKey } : {}) })
     : new MockPlayer(playerOptions)
   const chrome = linux
     ? new ChromeAppHost({ profileDir: join(opts.dataDir, 'chrome'), chromePath: opts.chromePath ?? '/usr/bin/google-chrome-stable',
-      extraArgs: LINUX_CHROME_ARGS, clock: opts.clock, logger: logger.child('apps'),
+      extraArgs: LINUX_CHROME_ARGS, beforeLaunch, clock: opts.clock, logger: logger.child('apps'),
       processes: opts.processes ?? procTable })
     : undefined
   // An app window left running by a shell that crashed would sit in front of this one; close it (launches wait for this).
@@ -229,6 +233,7 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   })
   const injector = opts.keyInjector ?? (linux ? new WtypeInjector({ logger: logger.child('phone') }) :
     new LogInjector(logger.child('phone')))
+  settleKeys = () => injector.settle()
   const phones = new PhoneRemote({ server: remote, settings, bindHost,
     store: new PhoneStore(secrets, { now: opts.clock ? () => opts.clock!.now() : undefined, logger: logger.child('phone') }),
     clock: opts.clock, logger: logger.child('phone'), action: phoneAction, text: phoneText,
@@ -305,6 +310,7 @@ export async function composeCore(opts: ComposeOptions): Promise<{
     if (disposed) return
     disposed = true
     phones.dispose()
+    injector.dispose()
     vpn.dispose()
     remote.dispose()
     try {

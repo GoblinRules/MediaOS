@@ -208,10 +208,13 @@ describe('Core app exit messages', () => {
 it('disables mpv web extraction in the fixed arguments before extra arguments', async () => {
   const server = new FakeMpv(); await server.start()
   const child = fakeChild(), spawn = vi.fn((_file: string, _args: string[]) => child)
-  const process = new MpvProcess({ platform: 'win32', spawn, extraArgs: ['--hwdec=no'],
+  // The keyboard is put back (after phone typing) before mpv opens its window.
+  const beforeStart = vi.fn(async () => { expect(spawn).not.toHaveBeenCalled() })
+  const process = new MpvProcess({ platform: 'win32', spawn, extraArgs: ['--hwdec=no'], beforeStart,
     transport: () => new MpvTransport(server.path) })
   try {
     await process.start()
+    expect(beforeStart).toHaveBeenCalledOnce()
     const args = spawn.mock.calls[0]![1]
     expect(args).toContain('--ytdl=no')
     expect(args.indexOf('--ytdl=no')).toBeLessThan(args.indexOf('--hwdec=no'))

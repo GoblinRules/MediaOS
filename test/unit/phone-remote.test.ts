@@ -415,7 +415,8 @@ describe('composed phone routing and IPC', () => {
     const routes = new Map<string, RemoteHandler>()
     vi.spyOn(RemoteServer.prototype, 'mount').mockImplementation((path, handler) => { routes.set(path, handler) })
     vi.spyOn(RemoteServer.prototype, 'acquire').mockImplementation(async () => lease())
-    const temp = await temporary(), injector = { key: vi.fn(async () => undefined), text: vi.fn(async () => undefined) }
+    const temp = await temporary(), injector = { key: vi.fn(async () => undefined), text: vi.fn(async () => undefined),
+      settle: vi.fn(async () => undefined), dispose: vi.fn() }
     const composed = await composeCore({ platform: 'mock', dataDir: temp.dir, logDir: temp.dir, appIcons: 'off',
       forceMockPlayer: true, mockDelayMs: 0, fixtureLatencyMs: 0, keyInjector: injector, restartShell() {} })
     const core = composed.core

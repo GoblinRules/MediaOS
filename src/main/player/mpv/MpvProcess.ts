@@ -14,6 +14,8 @@ export interface MpvProcessOptions {
   clock?: Runtime
   transport?: (path: string) => MpvTransport
   extraArgs?: string[]
+  /** Runs just before mpv starts (Linux: puts the keyboard back after phone typing). */
+  beforeStart?: () => Promise<void>
 }
 
 export async function findMpv(path?: string, env: NodeJS.ProcessEnv = process.env,
@@ -45,6 +47,7 @@ export class MpvProcess {
     await this.stopping
     if (this.transport) return this.transport
     if (this.child) await this.dispose()
+    await this.opts.beforeStart?.()
     this.pipe = this.newPipe()
     this.cancelled = false
     const args = ['--idle=yes', '--force-window=yes', `--input-ipc-server=${this.pipe}`, '--fullscreen',
