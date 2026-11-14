@@ -542,7 +542,8 @@ export class VpnController {
   async finishImport(label: string): Promise<VpnImportStage> {
     if (this.disposed) return { stage: 'error', error: 'save-failed' }
     if (await this.networkBusy()) { this.importError('save-failed'); this.emit(); return structuredClone(this.stage!) }
-    return this.queue(async () => {
+    let firstLocation = false
+    const stage: VpnImportStage = await this.queue(async () => {
       // The import contract has no Result or network-busy stage; use its existing save error.
       if (await this.networkBusy()) return this.importError('save-failed')
       if (this.disposed) return { stage: 'error', error: 'save-failed' }
@@ -563,6 +564,7 @@ export class VpnController {
         const v = this.vpn()
         await this.save({ locations: [...v.locations, location], activeLocationId: v.activeLocationId ?? location.id })
         this.clearImport(); this.stage = { stage: 'done', label: name }
+        firstLocation = v.locations.length === 0
         if (!this.vpn().enabled) await this.transition('off')
       } catch {
         if (uuid) {
@@ -579,6 +581,10 @@ export class VpnController {
       }
       return structuredClone(this.stage!)
     }, () => ({ stage: 'error', error: 'save-failed' }))
+    // The first location turns the VPN on, so nobody has to find "Use the VPN" after setting it up. Queued after the
+    // import so the Done screen doesn't wait for the tunnel; later locations leave the switch as it is.
+    if (firstLocation && stage.stage === 'done' && !this.disposed && !this.vpn().enabled) void this.setEnabled(true)
+    return stage
   }
   cancelImport(): Promise<Result> {
     return this.queue(async () => { this.clearImport(); this.stage = null; return ok }, () => ok)

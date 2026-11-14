@@ -586,6 +586,21 @@ describe('VPN imports', () => {
       expect(f.controller.status().import).toEqual({ stage: 'error', error: 'not-wireguard' })
     }
   })
+  it('turns the VPN on after the first location only, without the Done screen waiting for the tunnel', async () => {
+    const f = await setup(false); await f.controller.startImport(); await f.controller.receiveFile('UK.conf', conf())
+    let release!: () => void
+    f.backend.up.mockImplementationOnce(async (uuid: string) => { await new Promise<void>((r) => { release = r }); f.order.push(`up ${uuid}`) })
+    expect(await f.controller.finishImport('UK')).toEqual({ stage: 'done', label: 'UK' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(f.settings.get().vpn.enabled).toBe(true)
+    release(); await vi.advanceTimersByTimeAsync(0)
+    expect(f.order).toContain(`up ${imported}`)
+    await f.controller.setEnabled(false); f.backend.up.mockClear(); f.backend.importProfile.mockResolvedValue(uuid(10))
+    await f.controller.startImport(); await f.controller.receiveFile('FR.conf', conf())
+    expect(await f.controller.finishImport('France')).toEqual({ stage: 'done', label: 'France' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(f.settings.get().vpn.enabled).toBe(false); expect(f.backend.up).not.toHaveBeenCalled()
+  })
   it('uses suggestions, trims labels to code points and makes case-insensitive duplicates unique', async () => {
     const f = await setup(); await f.controller.startImport(); await f.controller.receiveFile('UK.conf', conf())
     expect(await f.controller.finishImport('')).toEqual({ stage: 'done', label: 'UK 2' })
