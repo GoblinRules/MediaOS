@@ -11,7 +11,9 @@ const nftAvailable = spawnSync('nft', ['--version'], { encoding: 'utf8', timeout
 describe('OS hardening', () => {
   it('blocks Chrome bypasses without overriding the app proxy or enabling developer tools', async () => {
     const policy: Record<string, unknown> = JSON.parse(await read('etc/opt/chrome/policies/managed/mediaos.json'))
-    expect(policy.WebRtcIPHandlingPolicy).toBe('disable_non_proxied_udp')
+    // Chrome's policy is WebRtcIPHandling; an unknown key (such as WebRtcIPHandlingPolicy) is silently ignored.
+    expect(policy.WebRtcIPHandling).toBe('disable_non_proxied_udp')
+    expect(policy).not.toHaveProperty('WebRtcIPHandlingPolicy')
     expect(policy.DnsOverHttpsMode).toBe('off')
     expect(policy.ExtensionInstallBlocklist).toEqual(['*'])
     expect(Object.keys(policy).filter((key) => key.startsWith('Proxy'))).toEqual([])
