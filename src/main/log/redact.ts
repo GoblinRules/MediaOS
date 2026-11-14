@@ -1,4 +1,4 @@
-const keys = '[\\w.-]*(?:token|secret|password|passwd|api[_-]?key|psk)[\\w.-]*|Authorization|pw'
+const keys = '[\\w.-]*(?:token|secret|password|passwd|api[_-]?key|psk|private-?key|preshared-?key)[\\w.-]*|Authorization|pw'
 const secretKey = new RegExp(keys, 'i')
 const jsonSecret = /("(?:\\.|[^"\\])*")(\s*:\s*)"(?:\\.|[^"\\])*"/g
 const querySecret = /([?&])([^=&#\s"']+)=([^&#\s"']*)/g
@@ -15,6 +15,7 @@ export function redact(text: string): string {
       secretKey.test(key) ? `${separator}${key}=[REDACTED]` : match)
     .replace(headerSecret, '$1[REDACTED]')
     .replace(assignment, '$1[REDACTED]')
+    .replace(/([=:]\s*)[A-Za-z0-9+/]{43}=(?![A-Za-z0-9+/=])/g, '$1[REDACTED]')
 }
 
 function sensitiveJsonKey(key: string): boolean {

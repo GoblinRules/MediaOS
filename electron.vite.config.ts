@@ -7,7 +7,10 @@ const shared = { '@shared': resolve(__dirname, 'src/shared') }
 export default defineConfig({
   main: {
     resolve: { alias: shared },
-    build: { externalizeDeps: true },
+    build: { externalizeDeps: true, rollupOptions: { input: {
+      index: resolve(__dirname, 'src/main/index.ts'),
+      'vpn-proxy': resolve(__dirname, 'src/main/vpn/proxy/entry.ts'),
+    } } },
   },
   preload: {
     resolve: { alias: shared },
