@@ -159,6 +159,17 @@ describe('NetworkManager WireGuard backend', () => {
       expect(r.run.mock.calls.some(([, args]) => args.includes('delete'))).toBe(step !== 'import')
     } finally { await temp.dispose() }
   })
+  it('keeps an import that never started because another location holds the tunnel', async () => {
+    const r = runner(), normal = r.run.getMockImplementation()!, temp = await temporary()
+    r.run.mockImplementation(async (file, args, opts) =>
+      args.includes('down') ? { code: 10, stdout: '', stderr: 'not an active connection' } : normal(file, args, opts))
+    const backend = new NmWireGuard({ runner: r, queue: new NetQueue(), runtimeDir: temp.dir })
+    try {
+      expect(await backend.importProfile(config(), 'Second')).toBe(uuid)
+      expect(r.run.mock.calls.some(([, args]) => args.includes('delete'))).toBe(false)
+      expect(r.run.mock.calls.some(([, args]) => args.includes('modify'))).toBe(true)
+    } finally { await temp.dispose() }
+  })
   it('cannot import without a runtime directory', async () => {
     const r = runner(), backend = new NmWireGuard({ runner: r, queue: new NetQueue(), runtimeDir: null })
     await expect(backend.importProfile(config(), 'UK')).rejects.toThrow(); expect(r.run).not.toHaveBeenCalled()

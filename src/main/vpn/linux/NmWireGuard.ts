@@ -36,7 +36,8 @@ export class NmWireGuard implements VpnBackend {
         const result = await this.run(['-t', 'connection', 'import', 'type', 'wireguard', 'file', file])
         uuid = 'stdout' in result ? importedUuid(result.stdout) : null
         if (!succeeded(result) || !uuid) throw failure()
-        await this.write(['connection', 'down', 'uuid', uuid])
+        // An import normally starts at once, but not while another location holds mosvpn0; nmcli then exits 10 (not active).
+        await this.write(['connection', 'down', 'uuid', uuid], 10)
         const ip = config.address
         await this.write(['connection', 'modify', uuid, 'connection.id', `MediaOS VPN - ${label}`, 'connection.autoconnect', 'no',
           'ipv4.route-table', '51820', 'ipv4.never-default', 'yes', 'ipv4.routes', '0.0.0.0/0 table=51820',
