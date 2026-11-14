@@ -9,6 +9,7 @@ import { updateSettings, useSettings } from '../../state/settings'
 import { toast } from '../../state/toasts'
 import { ChoiceRow, RowsState, Section, SettingRow, StepperRow, ToggleRow } from './parts'
 import { IpSettings } from './IpSettings'
+import { PairPhoneFlow, PhoneRemoteSection } from './phonePages'
 
 // ---------- Network ----------
 
@@ -400,11 +401,16 @@ const BUTTON_HELP: [string, string][] = [
   ['Game controller', 'A is OK, B is Back, Start is Menu, the Xbox/PS button is Home.'],
 ]
 
-export function RemotesPage({ k }: { k: (n: string) => string }): ReactNode {
+export function RemotesPage({ k, prefix }: { k: (n: string) => string; prefix: string }): ReactNode {
   const s = useSettings()
+  const [pairing, setPairing] = useState(false)
+  // An object so asking for the same row twice still moves focus.
+  const [refocus, setRefocus] = useState<{ key: string }>()
+  useEffect(() => {
+    if (refocus) focusScreen(refocus.key)
+  }, [refocus])
   const cec = useCall('cec.status', [])
   const bt = useCall('bluetooth.devices', [])
-  const net = useCall('network.status', [])
   const [scanning, setScanning] = useState(false)
   const reloadBt = bt.reload
 
@@ -456,7 +462,18 @@ export function RemotesPage({ k }: { k: (n: string) => string }): ReactNode {
   const tvPower = c?.tvPower === 'on' ? 'on' : c?.tvPower === 'standby' ? 'on standby' : undefined
   // The adapter only has an HDMI address once it can see the TV.
   const seesTv = !!c?.adapter && c.physicalAddress !== undefined
-  const phoneUrl = net.data?.ip ? `http://${net.data.ip}:${s.remote.port}` : undefined
+
+  if (pairing) {
+    return (
+      <PairPhoneFlow
+        prefix={prefix}
+        onDone={() => {
+          setPairing(false)
+          setRefocus({ key: k('phone-pair') })
+        }}
+      />
+    )
+  }
 
   return (
     <>
@@ -524,22 +541,7 @@ export function RemotesPage({ k }: { k: (n: string) => string }): ReactNode {
         ))}
         {bt.data && bt.data.length === 0 && !scanning && <div className="set-loading">No Bluetooth devices.</div>}
       </Section>
-      <Section title="Phone remote">
-        <ToggleRow
-          focusKey={k('phone')}
-          icon="phone"
-          label="Use a phone as a remote"
-          detail={
-            s.remote.phoneRemote
-              ? phoneUrl
-                ? `On a phone on the same Wi-Fi, open ${phoneUrl}`
-                : 'Connect the box to your network to use this.'
-              : 'Turned off.'
-          }
-          on={s.remote.phoneRemote}
-          onChange={(on) => void updateSettings({ remote: { phoneRemote: on } })}
-        />
-      </Section>
+      <PhoneRemoteSection k={k} onPair={() => setPairing(true)} />
       <Section title="Buttons">
         {BUTTON_HELP.map(([label, text]) => (
           <SettingRow key={label} focusKey={k(`help:${label}`)} label={label} detail={text} />

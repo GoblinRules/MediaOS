@@ -58,6 +58,14 @@ describe('remote source and bind policy', () => {
 })
 
 describe('remote sliding request budgets', () => {
+  it('supports custom per-source and total limits while keeping sliding windows', () => {
+    const limits = new RequestLimits({ perSource: 100, total: 150 })
+    for (let i = 0; i < 100; i++) expect(limits.allow('a', 0)).toBe(true)
+    expect(limits.allow('a', 0)).toBe(false)
+    for (let i = 0; i < 49; i++) expect(limits.allow('b', 0)).toBe(true)
+    expect(limits.allow('b', 0)).toBe(false)
+    expect(limits.allow('a', 60000)).toBe(true)
+  })
   it('allows five per source, counts refused attempts, and uses a sliding minute', () => {
     const limits = new RequestLimits()
     for (let i = 0; i < 5; i++) expect(limits.allow('a', i * 1000)).toBe(true)
@@ -81,6 +89,27 @@ describe('remote sliding request budgets', () => {
 })
 
 describe('RemoteServer', () => {
+  it('gives each configured route its own budget, keeps pairing strict, and resets all budgets on stop', async () => {
+    const server = make()
+    let calls = 0
+    const handler: Parameters<RemoteServer['mount']>[1] = (_req, res) => { calls++; res.end('ok') }
+    server.mount('/remote/key', handler, { limits: { perSource: 600, total: 1200 } })
+    server.mount('/remote/text', handler, { limits: { perSource: 600, total: 1200 } })
+    server.mount('/remote/pair', handler)
+    const first = await server.acquire(); good(first)
+    for (let i = 0; i < 100; i++) expect((await get(first.port, '/remote/key', { method: 'POST' })).status).toBe(200)
+    for (let i = 0; i < 5; i++) expect((await get(first.port, '/remote/pair', { method: 'POST' })).status).toBe(200)
+    expect((await get(first.port, '/remote/pair', { method: 'POST' })).status).toBe(429)
+    expect(calls).toBe(105)
+    expect((await get(first.port, '/remote/text', { method: 'POST' })).status).toBe(200)
+    expect((await get(first.port, '/unknown', { method: 'POST' })).status).toBe(429)
+    for (let i = 100; i < 600; i++) expect((await get(first.port, '/remote/key', { method: 'POST' })).status).toBe(200)
+    expect((await get(first.port, '/remote/key', { method: 'POST' })).status).toBe(429)
+    first.release()
+    const next = await server.acquire(); good(next)
+    expect((await get(next.port, '/remote/key', { method: 'POST' })).status).toBe(200)
+    expect((await get(next.port, '/remote/pair', { method: 'POST' })).status).toBe(200)
+  })
   it('has no listener until acquired, shares leases, and reads the port again on restart', async () => {
     const port = vi.fn(() => 0), server = make({ port })
     expect(port).not.toHaveBeenCalled()

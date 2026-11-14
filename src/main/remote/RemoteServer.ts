@@ -10,21 +10,22 @@ export type RemoteHandler = (request: IncomingMessage, response: ServerResponse,
   void | Promise<void>
 interface Listener {
   server: Server; host: string; port: number; leases: number; stopped: boolean; sockets: Set<Socket>; limits: RequestLimits
+  routeLimits: Map<string, RequestLimits>
   timer?: ReturnType<typeof setTimeout>
 }
 export interface RemoteServerOptions { bindHost(): Promise<string | null>; port(): number; logger?: Log; now?: () => number }
 
 export class RemoteServer {
-  private routes = new Map<string, RemoteHandler>()
+  private routes = new Map<string, { handler: RemoteHandler; limits?: { perSource: number; total: number } }>()
   private listener?: Listener
   private draining = new Set<Listener>()
   private tail: Promise<unknown> = Promise.resolve()
   private disposed = false
   private readonly logger: Log
   constructor(private opts: RemoteServerOptions) { this.logger = opts.logger ?? silentLog }
-  mount(path: string, handler: RemoteHandler): void {
+  mount(path: string, handler: RemoteHandler, opts?: { limits?: { perSource: number; total: number } }): void {
     if (this.routes.has(path)) throw new Error('Remote route already mounted')
-    this.routes.set(path, handler)
+    this.routes.set(path, { handler, limits: opts?.limits })
   }
   acquire(): Promise<RemoteLease> {
     const job = this.tail.then(() => this.takeLease())
@@ -41,7 +42,8 @@ export class RemoteServer {
       if (!isIPv4(host) || host === '0.0.0.0') return { ok: false, reason: 'unavailable' }
       // Node checks the two timeouts only every connectionsCheckingInterval (30 s by default), so check every second.
       const server = createServer({ maxHeaderSize: 8192, headersTimeout: 10000, requestTimeout: 20000, connectionsCheckingInterval: 1000 })
-      const listener: Listener = { server, host, port: 0, leases: 0, stopped: false, sockets: new Set(), limits: new RequestLimits() }
+      const listener: Listener = { server, host, port: 0, leases: 0, stopped: false, sockets: new Set(),
+        limits: new RequestLimits(), routeLimits: new Map() }
       server.maxConnections = 8; server.keepAliveTimeout = 0
       server.on('connection', (socket) => {
         listener.sockets.add(socket); socket.on('close', () => listener.sockets.delete(socket))
@@ -96,6 +98,7 @@ export class RemoteServer {
       this.draining.delete(listener)
     })
     listener.limits = new RequestLimits()
+    listener.routeLimits.clear()
     listener.timer = setTimeout(() => {
       for (const socket of listener.sockets) socket.destroy()
       this.draining.delete(listener)
@@ -121,7 +124,14 @@ export class RemoteServer {
     try { url = new URL(req.url ?? '', `http://${authority}`) }
     catch { /* Malformed requests still count towards the rate limit. */ }
     const favicon = req.method === 'GET' && url?.pathname === '/favicon.ico'
-    const withinLimit = favicon || listener.limits.allow(normaliseAddress(req.socket.remoteAddress), (this.opts.now ?? Date.now)())
+    const route = url ? this.routes.get(url.pathname) : undefined
+    let limits = listener.limits
+    if (url && route?.limits) {
+      let custom = listener.routeLimits.get(url.pathname)
+      if (!custom) { custom = new RequestLimits(route.limits); listener.routeLimits.set(url.pathname, custom) }
+      limits = custom
+    }
+    const withinLimit = favicon || limits.allow(normaliseAddress(req.socket.remoteAddress), (this.opts.now ?? Date.now)())
     // Node keeps only the first of several Host lines, so count them in the raw headers.
     const hostLines = req.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === 'host').length
     if (hostLines !== 1 || req.headers.host?.toLowerCase() !== authority.toLowerCase()) {
@@ -140,7 +150,7 @@ export class RemoteServer {
     if (!url) { res.statusCode = 400; res.end('Bad request.'); return }
     if (favicon) { res.statusCode = 404; res.end('Not found.'); return }
     if (req.headers.expect !== undefined) { res.statusCode = 400; res.end('Bad request.'); return }
-    const handler = this.routes.get(url.pathname)
+    const handler = route?.handler
     if (!handler) { res.statusCode = 404; res.end('Not found.'); return }
     const nonce = randomBytes(18).toString('base64')
     // Also set on non-HTML replies so routes cannot accidentally omit an HTML policy.

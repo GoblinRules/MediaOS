@@ -126,6 +126,12 @@ export function typeText(text: string): void {
   activeSink()?.insert(text)
 }
 
+/** Delete one character from the active text sink (the phone remote's ⌫). Does nothing when no keyboard is open. */
+export function eraseText(): void {
+  touch()
+  activeSink()?.backspace()
+}
+
 /** True while a holdable key (Back/Select/Home) is down, so the UI can hint "keep holding". */
 let timing: KeyTiming | undefined
 

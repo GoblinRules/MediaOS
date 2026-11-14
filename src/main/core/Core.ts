@@ -17,6 +17,7 @@ import type { Log } from '../log/Logger'
 import type { WeatherService } from '../weather/WeatherService'
 import { runtime, type Runtime } from './runtime'
 import { UpdateScheduler } from './UpdateScheduler'
+import type { PhoneRemotePort } from '../remote/phone-remote'
 
 export interface CoreOptions {
   hub: MediaHub; settings: SettingsStore; secrets: SecretStore; player: PlayerController
@@ -30,6 +31,7 @@ export interface CoreOptions {
   overnightUpdates?: boolean
   /** Weather beside the clock; without it the chip stays hidden. */
   weather?: Pick<WeatherService, 'search' | 'current'>
+  remote?: PhoneRemotePort
 }
 type Handlers = { [N in CallName]: (...args: CallArgs<N>) => Promise<CallResults[N]> }
 const ok: Result = { ok: true }
@@ -306,6 +308,11 @@ export class Core {
       'vpn.chooseImportEntry': (id) => this.vpn.chooseImportEntry(id),
       'vpn.finishImport': (label) => this.vpn.finishImport(label),
       'vpn.cancelImport': () => this.vpn.cancelImport(),
+      'remote.pairStart': async () => this.opts.remote?.pairStart() ?? { ok: false, error: 'unavailable' },
+      'remote.pairCancel': async () => this.opts.remote?.pairCancel() ?? ok,
+      'remote.phones': async () => this.opts.remote?.phones() ?? [],
+      'remote.removePhone': async (id) => this.opts.remote?.removePhone(id) ??
+        { ok: false, error: "Couldn't remove this phone. Try again." },
       'settings.get': async () => this.settings.get(),
       'settings.update': async (patch) => {
         const value = this.settings.update(patch)
@@ -388,6 +395,7 @@ export class Core {
           }
         }
         await step('sign-in flows', async () => { await this.signin.cancelAll() }, true)
+        this.opts.remote?.dispose()
         await step('sign-ins', () => this.secrets.erase(), true)
         await step('network', () => system.network.resetAll().then((r) => { if (!r.ok) throw new Error(r.error) }))
         await step('vpn', () => this.vpn.deleteAllProfiles())
@@ -415,6 +423,7 @@ export class Core {
     }
   }
   dispose(): void {
+    this.opts.remote?.dispose()
     this.vpn.dispose()
     this.updateScheduler?.dispose()
     ++this.trialSequence

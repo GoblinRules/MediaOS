@@ -6,7 +6,7 @@ Section: misc
 Priority: optional
 Depends: mediaos-shell (= @VERSION@), greetd, sway, mpv, socat, systemd, polkitd, jq, fonts-dejavu-core, fonts-inter,
  pipewire-pulse, wireplumber, network-manager, bluez, python3, python3-evdev, v4l-utils, inputattach, unattended-upgrades,
- cifs-utils, smbclient, nftables
+ cifs-utils, smbclient, nftables, wtype
 Recommends: intel-media-va-driver-non-free, firmware-intel-graphics, firmware-amd-graphics
 Description: MediaOS TV session settings
  Signs the TV user straight into a full-screen sway session that runs the MediaOS home screen, with the Home key

@@ -5,7 +5,7 @@ import { call, onEvent } from './lib/api'
 import { useStore } from './lib/store'
 import { invalidateData } from './lib/useCall'
 import { focusedItem, play } from './lib/items'
-import { LAYER, dispatch, noteScreenMove, useInputLayer } from './input/input'
+import { LAYER, dispatch, eraseText, noteScreenMove, typeText, useInputLayer } from './input/input'
 import { currentFocus, focus, openFocusedMenu } from './input/focus'
 import { closeAllOverlays, goTab, isTab, navStore, pop, resetTo, topEntry, type Entry } from './state/nav'
 import { appRunning, foregroundStore, playerActive, playerStore } from './state/player'
@@ -79,6 +79,7 @@ function useCoreEvents(): void {
       onEvent('homeChanged', () => invalidateData()),
       onEvent('system', () => invalidateData()),
       onEvent('recovery', () => openSystemMenu(openRecoveryMenu)),
+      onEvent('remoteText', (t) => ('text' in t ? typeText(t.text) : eraseText())),
       onEvent('vpnDropped', ({ appId }) => {
         void call('apps.list')
           .then((list) => list.find((a) => a.id === appId))

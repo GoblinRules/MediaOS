@@ -33,23 +33,29 @@ export const MAX_TRACKED_SOURCES = 64
 export class RequestLimits {
   private sources = new Map<string, number[]>()
   private total: number[] = []
+  constructor(private limits: { perSource: number; total: number } = { perSource: 5, total: 30 }) {}
   get trackedSources(): number { return this.sources.size }
-  allow(source: string, now: number): boolean {
+  /** Inspect failed-auth windows without counting a successful request. */
+  blocked(source: string, now: number): boolean {
     const since = now - 60000
     this.total = this.total.filter((time) => time > since)
     for (const [key, times] of this.sources) {
       const current = times.filter((time) => time > since)
       if (current.length) this.sources.set(key, current); else this.sources.delete(key)
     }
+    return (this.sources.get(source)?.length ?? 0) >= this.limits.perSource || this.total.length >= this.limits.total ||
+      (!this.sources.has(source) && this.sources.size >= MAX_TRACKED_SOURCES)
+  }
+  allow(source: string, now: number): boolean {
+    const allowed = !this.blocked(source, now)
     const known = this.sources.get(source)
     if (!known && this.sources.size >= MAX_TRACKED_SOURCES) {
-      this.total = [...this.total, now].slice(-30)
+      this.total = [...this.total, now].slice(-this.limits.total)
       return false
     }
     const times = known ?? []
-    const allowed = times.length < 5 && this.total.length < 30
-    this.sources.set(source, [...times, now].slice(-5))
-    this.total = [...this.total, now].slice(-30)
+    this.sources.set(source, [...times, now].slice(-this.limits.perSource))
+    this.total = [...this.total, now].slice(-this.limits.total)
     return allowed
   }
 }

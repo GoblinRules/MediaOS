@@ -95,6 +95,7 @@ describe('core composition and IPC', () => {
         'vpn.status': [], 'vpn.setEnabled': [false], 'vpn.setLocation': ['loc-00000000'], 'vpn.removeLocation': ['loc-00000000'],
         'vpn.check': [], 'vpn.setAppVpn': ['iplayer', 'vpn-only'], 'vpn.setAllApps': ['direct'], 'vpn.startImport': [],
         'vpn.chooseImportEntry': ['any'], 'vpn.finishImport': ['UK'], 'vpn.cancelImport': [],
+        'remote.pairStart': [], 'remote.pairCancel': [], 'remote.phones': [], 'remote.removePhone': ['missing'],
       }
       const seen = new Set<string>()
       for (const name of Object.keys(CALLS) as CallName[]) {

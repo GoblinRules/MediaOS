@@ -9,6 +9,11 @@ import * as fs from 'node:fs/promises'
 import { networkInterfaces, tmpdir } from 'node:os'
 import { RemoteServer } from '../remote/RemoteServer'
 import { VpnUpload } from '../remote/upload'
+import { PhoneRemote } from '../remote/phone-remote'
+import { PhoneStore } from '../remote/phone-store'
+import { APP_PHONE_KEYS, LogInjector, WtypeInjector, type KeyInjector } from '../remote/key-injector'
+import type { PhoneAction } from '../remote/remote-page'
+import type { RemoteText } from '../../shared/remote-types'
 import { lanAddress, privateIpv4 } from '../remote/source-policy'
 import { Core } from './Core'
 import { SettingsStore } from '../settings/SettingsStore'
@@ -76,6 +81,8 @@ export interface ComposeOptions {
   focusShell?: () => void
   /** Linux only: the process list used to find app windows left over from a crashed shell (tests pass a fake). */
   processes?: ProcessTable
+  /** Tests may record phone keys without starting wtype. */
+  keyInjector?: KeyInjector
 }
 
 /** mpv on the TV: it takes the remote's keys itself and hands the ones that matter back through `mediaos-key` messages. */
@@ -186,15 +193,15 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const backend = realVpn ? new NmWireGuard({ runner: new NodeCommandRunner(logger.child('vpn')),
     queue: net ? netQueue : new NetQueue(), runtimeDir: process.env.XDG_RUNTIME_DIR ?? null }) :
     new MockVpnBackend({ scenario: opts.vpnScenario, delayMs: opts.mockDelayMs, clock: opts.clock })
+  const bindHost = async (): Promise<string | null> => {
+    if (opts.realSystem?.includes('network')) {
+      const ip = (await system.network.status()).ip
+      return ip && privateIpv4(ip) ? ip : null
+    }
+    return opts.lan ? lanAddress(networkInterfaces()) : '127.0.0.1'
+  }
   const remote = new RemoteServer({ port: () => settings.get().remote.port, logger: logger.child('remote'),
-    now: opts.clock ? () => opts.clock!.now() : undefined,
-    bindHost: async () => {
-      if (opts.realSystem?.includes('network')) {
-        const ip = (await system.network.status()).ip
-        return ip && privateIpv4(ip) ? ip : null
-      }
-      return opts.lan ? lanAddress(networkInterfaces()) : '127.0.0.1'
-    } })
+    now: opts.clock ? () => opts.clock!.now() : undefined, bindHost })
   const upload: VpnUpload = new VpnUpload(remote, {
     receiveFile: (name, data, code) => vpn.receiveFile(name, data, code),
     uploadTooLarge: (code) => vpn.uploadTooLarge(code),
@@ -220,7 +227,13 @@ export async function composeCore(opts: ComposeOptions): Promise<{
       } finally { await handle.close() }
     } : undefined,
   })
-  const core = new Core({ hub, settings, secrets, player, apps, vpn, system, signin, logger, notices, weather,
+  const injector = opts.keyInjector ?? (linux ? new WtypeInjector({ logger: logger.child('phone') }) :
+    new LogInjector(logger.child('phone')))
+  const phones = new PhoneRemote({ server: remote, settings, bindHost,
+    store: new PhoneStore(secrets, { now: opts.clock ? () => opts.clock!.now() : undefined, logger: logger.child('phone') }),
+    clock: opts.clock, logger: logger.child('phone'), action: phoneAction, text: phoneText,
+    emit: (event, value) => core.emit(event, value) })
+  const core = new Core({ hub, settings, secrets, player, apps, vpn, system, signin, logger, notices, weather, remote: phones,
     timers: opts.clock, overnightUpdates: linux,
     bootOnce: linux ? async (key) => {
       try {
@@ -242,20 +255,22 @@ export async function composeCore(opts: ComposeOptions): Promise<{
     } })
   void core.start()
   let control: { server: ControlServer; commands: ControlCommands } | undefined
+  const router = new ActionRouter({ foreground: () => core.getForeground(), setForeground: (f) => core.setForeground(f),
+    player, apps, playbackSettings: () => settings.get().playback, emit: (event, value) => core.emit(event, value) })
+  const focusShell = linux ? opts.focusShell : undefined
   if (linux) {
-    const linuxRouter = new ActionRouter({ foreground: () => core.getForeground(), setForeground: (f) => core.setForeground(f),
-      player, apps, playbackSettings: () => settings.get().playback, emit: (event, value) => core.emit(event, value) })
-    const focusShell = opts.focusShell
     if (focusShell) core.on('foreground', (f) => { if (f.kind === 'shell') focusShell() })
-    const route = async (action: Action, long = false): Promise<void> => {
-      // Any button wakes a screen MediaOS switched off, even while an app or video has the keys.
-      await core.wakeScreen()
-      try { await linuxRouter.route(action, long) } finally {
-        // Home and Recovery always end on the shell. Say so to sway even when core already thought the shell was in front
-        // (a stray window may have the keyboard), not only when the foreground changes.
-        if (focusShell && (action === 'home' || action === 'recovery')) focusShell()
-      }
+  }
+  const route = async (action: Action, long = false): Promise<void> => {
+    // Any button wakes a screen MediaOS switched off, even while an app or video has the keys.
+    await core.wakeScreen()
+    try { await router.route(action, long) } finally {
+      // Home and Recovery always end on the shell. Say so to sway even when core already thought the shell was in front
+      // (a stray window may have the keyboard), not only when the foreground changes.
+      if (focusShell && (action === 'home' || action === 'recovery')) focusShell()
     }
+  }
+  if (linux) {
     routeKey = route
     if (opts.controlSocket) {
       const commands = new ControlCommands(route, logger.child('control'))
@@ -264,10 +279,32 @@ export async function composeCore(opts: ComposeOptions): Promise<{
       control = { server, commands }
     }
   }
+  async function phoneAction(action: PhoneAction): Promise<number | void> {
+    if (action === 'volumeUp' || action === 'volumeDown') {
+      const current = await system.audio.volume()
+      const volume = Math.max(0, Math.min(100, current + (action === 'volumeUp' ? 5 : -5)))
+      const result = await system.audio.setVolume(volume)
+      if (!result.ok) throw new Error(result.error)
+      return volume
+    }
+    if (action === 'home' || action === 'recovery') { await route(action); return }
+    await core.wakeScreen()
+    if (core.getForeground().kind === 'app') await injector.key(APP_PHONE_KEYS[action])
+    else await router.route(action)
+  }
+  async function phoneText(value: RemoteText): Promise<void> {
+    const foreground = core.getForeground().kind
+    if (foreground === 'shell') core.emit('remoteText', value)
+    if (foreground === 'app') {
+      if ('text' in value) await injector.text(value.text)
+      else await injector.key('BackSpace')
+    }
+  }
   let disposed = false
   return { core, images, appIcons, dispose: async () => {
     if (disposed) return
     disposed = true
+    phones.dispose()
     vpn.dispose()
     remote.dispose()
     try {

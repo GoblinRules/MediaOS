@@ -6,6 +6,7 @@ import type { HomeData, Library, MediaItem, MediaItemDetail, Page, SourceInfo } 
 import type { AppEntry } from './apps'
 import type { PlayerState } from './player-types'
 import type { WeatherNow, WeatherPlace } from './weather'
+import type { PairEndReason, PairStartResult, PhoneInfo, RemoteText } from './remote-types'
 import type {
   AudioSink, BtDevice, CecStatus, DisplayOutput, IpConfig as IpConfigType, NetProfile, NetStatus, NetTrial, Result, SysInfo,
   TimeInfo, Toast, UpdateInfo, WifiAp,
@@ -168,6 +169,11 @@ export const CALLS = {
   'vpn.finishImport': z.tuple([VpnLabel]),
   'vpn.cancelImport': z.tuple([]),
 
+  'remote.pairStart': z.tuple([]),
+  'remote.pairCancel': z.tuple([]),
+  'remote.phones': z.tuple([]),
+  'remote.removePhone': z.tuple([Id]),
+
   // Settings
   'settings.get': z.tuple([]),
   'settings.update': z.tuple([SettingsPatch]),
@@ -314,6 +320,10 @@ export interface CallResults {
   'vpn.chooseImportEntry': VpnImportStage
   'vpn.finishImport': VpnImportStage
   'vpn.cancelImport': Result
+  'remote.pairStart': PairStartResult
+  'remote.pairCancel': Result
+  'remote.phones': PhoneInfo[]
+  'remote.removePhone': Result
   'settings.get': Settings
   'settings.update': Settings
   'network.status': NetStatus
@@ -387,6 +397,10 @@ export interface EventPayloads {
   vpn: { status: VpnStatus }
   /** A VPN app was closed because the tunnel dropped (vpn.md review M9); Home shows a dialog. */
   vpnDropped: { appId: string }
+  remotePaired: { id: string; name: string; replaced?: string }
+  remotePairEnded: { reason: PairEndReason }
+  remotePhones: Record<string, never>
+  remoteText: RemoteText
 }
 export type EventName = keyof EventPayloads
 
@@ -401,6 +415,10 @@ export const EVENT_SCHEMAS: { [K in EventName]: z.ZodType } = {
   netTrial: z.object({ trial: NetTrialSchema.nullable() }).strict(),
   vpn: z.object({ status: z.object({ state: z.string(), enabled: z.boolean() }).loose() }).strict(),
   vpnDropped: z.object({ appId: z.string().max(200) }).strict(),
+  remotePaired: z.object({ id: Id, name: z.string().max(40), replaced: z.string().max(40).optional() }).strict(),
+  remotePairEnded: z.object({ reason: z.enum(['paired', 'expired', 'too-many-tries', 'off']) }).strict(),
+  remotePhones: z.object({}).strict(),
+  remoteText: z.union([z.object({ text: z.string().max(200) }).strict(), z.object({ backspace: z.literal(true) }).strict()]),
 }
 
 /** Wire format of a call's reply (Electron mangles thrown errors, so errors travel as data). */
