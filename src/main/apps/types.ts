@@ -9,6 +9,8 @@ export interface AppHost {
   /** Close the running app (if any). */
   close(): Promise<void>
   running(): string | undefined
+  /** The running app's browser process id (Linux), for its media controls. */
+  runningPid(): number | undefined
   /** Wipe the app's browser profile (signs the user out of that service). */
   resetProfile(appId: string): Promise<void>
   /** Fires when the running app exits by itself (crash, user closed it). */

@@ -35,6 +35,7 @@ export class MockAppHost implements AppHost {
     return job
   }
   running(): string | undefined { return this.current?.appId }
+  runningPid(): number | undefined { return undefined }
   async resetProfile(appId: string): Promise<void> { (this.opts.logger ?? silentLog).info(`Mock profile reset: ${appId}`) }
   onExit(cb: (id: string, reason: AppExitReason) => void): () => void {
     this.listeners.add(cb); return () => { this.listeners.delete(cb) }

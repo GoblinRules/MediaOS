@@ -101,6 +101,7 @@ export class ChromeAppHost implements AppHost {
   }
   close(): Promise<void> { return this.serial(() => this.closeCurrent()) }
   running(): string | undefined { return this.current?.id }
+  runningPid(): number | undefined { return this.current?.child.pid }
   resetProfile(appId: string): Promise<void> {
     return this.serial(async () => {
       const target = profilePath(this.opts.profileDir, appId)

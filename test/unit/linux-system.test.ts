@@ -351,7 +351,7 @@ describe('system composition', () => {
     const create = vi.spyOn(linuxSystem, 'createLinuxSystem')
     const composed = await composeCore({ platform, dataDir: temp.dir, logDir: join(temp.dir, 'logs'),
       appVersion: '9.8.7', forceMockPlayer: true, mockDelayMs: 0, processes: { list: async () => [], signal: () => false },
-      restartShell() {} })
+      restartShell() {}, swayWindows: false })
     const dispose = platform === 'linux' ? vi.spyOn(create.mock.results[0]!.value as linuxSystem.LinuxSystem, 'dispose') : undefined
     try {
       const system = composed.core.system
@@ -376,7 +376,7 @@ describe('system composition', () => {
     vi.spyOn(NodeCommandRunner.prototype, 'run').mockResolvedValue(reply('[]'))
     const composed = await composeCore({ platform: 'linux', realSystem: ['network'], dataDir: temp.dir,
       logDir: join(temp.dir, 'logs'), forceMockPlayer: true, processes: { list: async () => [], signal: () => false },
-      restartShell() {} })
+      restartShell() {}, swayWindows: false })
     try {
       expect(composed.core.system.network).toBe(network)
       expect(await composed.core.system.info.get()).toMatchObject({ platform: 'linux', ip: '10.20.30.40' })

@@ -11,7 +11,8 @@ import { RemoteServer } from '../remote/RemoteServer'
 import { VpnUpload } from '../remote/upload'
 import { PhoneRemote } from '../remote/phone-remote'
 import { PhoneStore } from '../remote/phone-store'
-import { APP_PHONE_KEYS, LogInjector, WtypeInjector, type KeyInjector } from '../remote/key-injector'
+import { APP_PHONE_KEYS, LogInjector, POINTER_BACK_KEY, WtypeInjector, type KeyInjector } from '../remote/key-injector'
+import { LogMediaControl, MprisMediaControl, type AppMediaControl } from '../remote/media-control'
 import type { PhoneAction } from '../remote/remote-page'
 import type { RemoteText } from '../../shared/remote-types'
 import { lanAddress, privateIpv4 } from '../remote/source-policy'
@@ -29,6 +30,7 @@ import { MpvController } from '../player/MpvController'
 import { findMpv } from '../player/mpv/MpvProcess'
 import { createLinuxNetwork, withRealIp } from '../system/linux/LinuxNetwork'
 import { createLinuxSystem } from '../system/linux/LinuxSystem'
+import { SwayWindowKeeper } from '../system/linux/sway-windows'
 import { createMockSystem } from '../system/mock/MockSystemServices'
 import { MockAppHost, type MockAppOptions } from '../apps/MockAppHost'
 import { ChromeAppHost } from '../apps/ChromeAppHost'
@@ -83,6 +85,10 @@ export interface ComposeOptions {
   processes?: ProcessTable
   /** Tests may record phone keys without starting wtype. */
   keyInjector?: KeyInjector
+  /** Tests: play, pause and seek in Chrome apps (Linux default: MPRIS on the session bus). */
+  mediaControl?: AppMediaControl
+  /** Linux only: keep the window in front full screen under sway (default on; tests turn it off). */
+  swayWindows?: boolean
 }
 
 /** mpv on the TV: it takes the remote's keys itself and hands the ones that matter back through `mediaos-key` messages. */
@@ -234,6 +240,10 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const injector = opts.keyInjector ?? (linux ? new WtypeInjector({ logger: logger.child('phone') }) :
     new LogInjector(logger.child('phone')))
   settleKeys = () => injector.settle()
+  const windows = linux && opts.swayWindows !== false ? new SwayWindowKeeper({ logger: logger.child('sway') }) : undefined
+  windows?.start()
+  const media = opts.mediaControl ?? (linux ? new MprisMediaControl({ logger: logger.child('phone') }) :
+    new LogMediaControl(logger.child('phone')))
   const phones = new PhoneRemote({ server: remote, settings, bindHost,
     store: new PhoneStore(secrets, { now: opts.clock ? () => opts.clock!.now() : undefined, logger: logger.child('phone') }),
     clock: opts.clock, logger: logger.child('phone'), action: phoneAction, text: phoneText,
@@ -294,8 +304,16 @@ export async function composeCore(opts: ComposeOptions): Promise<{
     }
     if (action === 'home' || action === 'recovery') { await route(action); return }
     await core.wakeScreen()
-    if (core.getForeground().kind === 'app') await injector.key(APP_PHONE_KEYS[action])
-    else await router.route(action)
+    const foreground = core.getForeground()
+    if (foreground.kind !== 'app') { await router.route(action); return }
+    if (action === 'playPause' || action === 'rewind' || action === 'fastForward') {
+      const playback = settings.get().playback
+      await media.send(apps.runningPid(), action === 'playPause' ? { kind: 'playPause' }
+        : { kind: 'seek', seconds: action === 'rewind' ? -playback.skipBackSec : playback.skipForwardSec })
+      return
+    }
+    const pointer = action === 'back' && findApp(foreground.appId)?.nav === 'pointer'
+    await injector.key(pointer ? POINTER_BACK_KEY : APP_PHONE_KEYS[action])
   }
   async function phoneText(value: RemoteText): Promise<void> {
     const foreground = core.getForeground().kind
@@ -311,6 +329,7 @@ export async function composeCore(opts: ComposeOptions): Promise<{
     disposed = true
     phones.dispose()
     injector.dispose()
+    windows?.dispose()
     vpn.dispose()
     remote.dispose()
     try {

@@ -8,11 +8,13 @@ export interface KeyInjector {
   settle(): Promise<void>
   dispose(): void
 }
+/** Phone keys typed into the app in front. Play, pause and seek go through Chrome's media controls (media-control.ts). */
 export const APP_PHONE_KEYS = {
   up: 'Up', down: 'Down', left: 'Left', right: 'Right', select: 'Return', back: 'Escape', menu: 'Menu',
-  playPause: 'XF86AudioPlay', rewind: 'XF86AudioRewind', fastForward: 'XF86AudioForward',
 } as const
-const KEYS = new Set<string>([...Object.values(APP_PHONE_KEYS), 'BackSpace'])
+/** Desktop websites ignore Escape for Back; Chrome's own Back key goes back a page. TV-style apps keep Escape. */
+export const POINTER_BACK_KEY = 'XF86Back'
+const KEYS = new Set<string>([...Object.values(APP_PHONE_KEYS), POINTER_BACK_KEY, 'BackSpace'])
 
 function checkKey(name: string): void { if (!KEYS.has(name)) throw new Error('Unknown phone key') }
 

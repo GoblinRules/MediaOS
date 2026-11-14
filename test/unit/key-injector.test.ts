@@ -1,6 +1,6 @@
 import { execFile, type ExecFileException } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { APP_PHONE_KEYS, LogInjector, WtypeInjector } from '../../src/main/remote/key-injector'
+import { APP_PHONE_KEYS, LogInjector, POINTER_BACK_KEY, WtypeInjector } from '../../src/main/remote/key-injector'
 import { silentLog } from '../../src/main/log/Logger'
 
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }))
@@ -24,7 +24,7 @@ describe('phone key injection', () => {
     expect(execFile).toHaveBeenNthCalledWith(3, 'wtype', ['-k', 'BackSpace'], { timeout: 2000 }, expect.any(Function))
     callbacks[2]!(null); await third
   })
-  it.each(['F1', 'XF86HomePage', 'Ctrl+Mod1+BackSpace', 'Return; reboot', 'unknown'])(
+  it.each(['F1', 'XF86HomePage', 'XF86AudioPlay', 'Ctrl+Mod1+BackSpace', 'Return; reboot', 'unknown'])(
     'refuses keys outside the fixed map: %s', async (key) => {
       await expect(new WtypeInjector({ display: () => 'wayland-1' }).key(key)).rejects.toThrow('Unknown phone key')
       expect(execFile).not.toHaveBeenCalled()
@@ -93,7 +93,7 @@ describe('phone key injection', () => {
   })
   it('logs mock keys and only character counts for text', async () => {
     const debug = vi.fn(), injector = new LogInjector({ ...silentLog, debug })
-    for (const name of Object.values(APP_PHONE_KEYS)) await injector.key(name)
+    for (const name of [...Object.values(APP_PHONE_KEYS), POINTER_BACK_KEY]) await injector.key(name)
     await injector.text('private')
     expect(debug).toHaveBeenCalledWith('Phone key: Up')
     expect(debug).toHaveBeenLastCalledWith('Phone text: 7 characters')

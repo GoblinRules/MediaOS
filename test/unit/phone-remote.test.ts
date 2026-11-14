@@ -416,9 +416,10 @@ describe('composed phone routing and IPC', () => {
     vi.spyOn(RemoteServer.prototype, 'mount').mockImplementation((path, handler) => { routes.set(path, handler) })
     vi.spyOn(RemoteServer.prototype, 'acquire').mockImplementation(async () => lease())
     const temp = await temporary(), injector = { key: vi.fn(async () => undefined), text: vi.fn(async () => undefined),
-      settle: vi.fn(async () => undefined), dispose: vi.fn() }
+      settle: vi.fn(async () => undefined), dispose: vi.fn() }, media = { send: vi.fn(async () => undefined) }
     const composed = await composeCore({ platform: 'mock', dataDir: temp.dir, logDir: temp.dir, appIcons: 'off',
-      forceMockPlayer: true, mockDelayMs: 0, fixtureLatencyMs: 0, keyInjector: injector, restartShell() {} })
+      forceMockPlayer: true, mockDelayMs: 0, fixtureLatencyMs: 0, keyInjector: injector, mediaControl: media,
+      restartShell() {} })
     const core = composed.core
     try {
       const start = await core.dispatch('remote.pairStart', [])
@@ -440,7 +441,21 @@ describe('composed phone routing and IPC', () => {
       for (const [action, mapped] of Object.entries(APP_PHONE_KEYS)) {
         await key(action); expect(injector.key).toHaveBeenLastCalledWith(mapped)
       }
+      // Media buttons use Chrome's media controls on the running app's browser, never typed media keys.
+      const pid = vi.spyOn(core.apps, 'runningPid').mockReturnValue(4321), playback = core.settings.get().playback
+      const keys = injector.key.mock.calls.length
+      await key('playPause'); expect(media.send).toHaveBeenLastCalledWith(4321, { kind: 'playPause' })
+      await key('rewind'); expect(media.send).toHaveBeenLastCalledWith(4321, { kind: 'seek', seconds: -playback.skipBackSec })
+      await key('fastForward')
+      expect(media.send).toHaveBeenLastCalledWith(4321, { kind: 'seek', seconds: playback.skipForwardSec })
+      expect(injector.key).toHaveBeenCalledTimes(keys); pid.mockRestore()
       expect(wake).toHaveBeenCalledTimes(10)
+      // Desktop websites ignore Escape, so Back is Chrome's own Back key there; TV-style YouTube keeps Escape.
+      core.setForeground({ kind: 'app', appId: 'iplayer' })
+      await key('back'); expect(injector.key).toHaveBeenLastCalledWith('XF86Back')
+      await key('up'); expect(injector.key).toHaveBeenLastCalledWith('Up')
+      core.setForeground({ kind: 'app', appId: 'youtube' })
+      await key('back'); expect(injector.key).toHaveBeenLastCalledWith('Escape')
       await text({ text: 'private\n\u202etext' }); expect(injector.text).toHaveBeenCalledWith('privatetext')
       await text({ backspace: true }); expect(injector.key).toHaveBeenLastCalledWith('BackSpace')
       await key('home'); expect(close).toHaveBeenCalled(); expect(core.getForeground()).toEqual({ kind: 'shell' })

@@ -124,7 +124,7 @@ describe('Linux shell wiring', () => {
         `--user-data-dir=${join(temp.dir, 'chrome', 'youtube')}`] },
       { pid: 42, args: ['/opt/google/chrome/chrome', '--user-data-dir=/home/someone/.config/google-chrome'] },
     ])
-    const composed = await composeCore({ platform: 'linux', dataDir: temp.dir, logDir: join(temp.dir, 'logs'), restartShell() {},
+    const composed = await composeCore({ platform: 'linux', swayWindows: false, dataDir: temp.dir, logDir: join(temp.dir, 'logs'), restartShell() {},
       forceMockPlayer: true, fixtureLatencyMs: 0, controlSocket: path, chromePath: 'chrome-not-installed', focusShell: focus,
       processes: table })
     const events: { name: string; value: unknown }[] = []

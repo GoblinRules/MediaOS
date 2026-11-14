@@ -487,7 +487,7 @@ describe('ActionRouter', () => {
       command: vi.fn(async (cmd) => { commands.push(cmd) }), stop: vi.fn(async () => undefined),
       play: vi.fn(async () => undefined), onState: () => () => undefined, dispose: async () => undefined }
     const apps: AppHost = { close: vi.fn(async () => undefined), launch: async () => undefined,
-      running: () => undefined, resetProfile: async () => undefined, onExit: () => () => undefined }
+      running: () => undefined, runningPid: () => undefined, resetProfile: async () => undefined, onExit: () => () => undefined }
     const setForeground = (value: Foreground) => { foreground = value }
     const router = new ActionRouter({ player, apps, foreground: () => foreground, setForeground,
       playbackSettings: () => ({ skipBackSec: 15, skipForwardSec: 45 }), emit: (name, value) => events.push({ name, value }) })
