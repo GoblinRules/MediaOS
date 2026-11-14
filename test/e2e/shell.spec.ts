@@ -114,7 +114,7 @@ test('every screen can be reached and left by keyboard', async () => {
 
   // Every Settings section.
   await openTab(page, 'Settings')
-  const ids = ['network', 'display', 'sound', 'remotes', 'libraries', 'home', 'apps', 'playback', 'system']
+  const ids = ['network', 'vpn', 'display','sound', 'remotes', 'libraries', 'home', 'apps', 'playback', 'system']
   for (const [i, id] of ids.entries()) {
     if (i > 0) await press(page, 'ArrowDown')
     await expect(page.getByTestId(`settings-page-${id}`)).toBeVisible()
@@ -257,7 +257,7 @@ test('two steppers changed quickly both stay changed', async () => {
   const page = box.page
   await finishSetup(page)
   await openTab(page, 'Settings')
-  await press(page, 'ArrowDown', 7)
+  await press(page, 'ArrowDown', 8)
   await expect(page.getByTestId('settings-page-playback')).toBeVisible()
   await press(page, 'Enter')
   await expectFocus(page, 'Left skips back')
@@ -287,7 +287,7 @@ test('leaving the page straight after changing two steppers still saves both', a
   const page = box.page
   await finishSetup(page)
   await openTab(page, 'Settings')
-  await press(page, 'ArrowDown', 7)
+  await press(page, 'ArrowDown', 8)
   await expect(page.getByTestId('settings-page-playback')).toBeVisible()
   await press(page, 'Enter')
   await expectFocus(page, 'Left skips back')
@@ -361,7 +361,7 @@ test('settings survive a restart', async () => {
   let page = box.page
   await finishSetup(page)
   await openTab(page, 'Settings')
-  await press(page, 'ArrowDown')
+  await press(page, 'ArrowDown', 2)
   await expect(page.getByTestId('settings-page-display')).toBeVisible()
   await press(page, 'Enter')
   for (let i = 0; i < 4 && !(await focused(page).textContent())?.includes('Text size'); i++) await press(page, 'ArrowDown')

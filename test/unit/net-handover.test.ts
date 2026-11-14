@@ -315,7 +315,7 @@ it('lets NetworkManager write DNS settings to resolv.conf and enables real netwo
   expect(nm.split('\n').filter((line) => !line.startsWith('#')).join('\n')).toBe('[main]\ndns=default\nrc-manager=file\n')
   expect(nm.split('\n').filter((line) => line.startsWith('#'))).toHaveLength(2)
   const service = await readFile(join(config, 'usr/lib/systemd/user/mediaos-shell.service'), 'utf8')
-  expect(service).toContain('Environment=MEDIAOS_PLATFORM=linux\nEnvironment=MEDIAOS_REAL_SYSTEM=network\n')
+  expect(service).toContain('Environment=MEDIAOS_PLATFORM=linux\nEnvironment=MEDIAOS_REAL_SYSTEM=network,vpn\n')
   const build = await readFile(resolve('os/build/build-in-container.sh'), 'utf8')
   const chmod = build.replace(/\\\n\s*/g, '').split('\n').find((line) => line.startsWith('chmod 0755 '))
   expect(chmod).toContain('"$root/usr/libexec/mediaos/net-handover"')

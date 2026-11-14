@@ -17,7 +17,7 @@ export const TABS: { id: Tab; label: string }[] = [
 ]
 
 export type SettingsPage =
-  | 'network' | 'display' | 'sound' | 'remotes' | 'libraries' | 'home' | 'apps' | 'playback' | 'system'
+  | 'network' | 'vpn' | 'display' | 'sound' | 'remotes' | 'libraries' | 'home' | 'apps' | 'playback' | 'system'
 
 export type Route =
   | { name: 'home' }

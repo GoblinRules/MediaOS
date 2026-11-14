@@ -8,7 +8,7 @@ StartLimitBurst=5
 Type=simple
 UMask=0077
 Environment=MEDIAOS_PLATFORM=linux
-Environment=MEDIAOS_REAL_SYSTEM=network
+Environment=MEDIAOS_REAL_SYSTEM=network,vpn
 ExecStart=/opt/MediaOS/mediaos-shell --ozone-platform=wayland
 Restart=always
 RestartSec=1

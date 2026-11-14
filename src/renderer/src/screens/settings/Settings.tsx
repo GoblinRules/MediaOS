@@ -7,11 +7,13 @@ import { LAYER, useInputLayer } from '../../input/input'
 import { useScreenFocus, type Entry, type SettingsPage } from '../../state/nav'
 import { AppsPage, HomePage, LibrariesPage, PlaybackPage, SystemPage } from './contentPages'
 import { DisplayPage, NetworkPage, RemotesPage, SoundPage } from './devicePages'
+import { VpnPage } from './vpnPages'
 
 type PageProps = { k: (n: string) => string; prefix: string }
 
 const PAGES: { id: SettingsPage; label: string; icon: string; hint: string; View: (p: PageProps) => ReactNode }[] = [
   { id: 'network', label: 'Network', icon: 'wifi', hint: 'Wi-Fi and cable', View: NetworkPage },
+  { id: 'vpn', label: 'VPN', icon: 'shield', hint: 'Choose which apps use a VPN', View: VpnPage },
   { id: 'display', label: 'Display', icon: 'display', hint: 'Picture size, text size, screensaver', View: DisplayPage },
   { id: 'sound', label: 'Sound', icon: 'sound', hint: 'Speakers and volume', View: SoundPage },
   { id: 'remotes', label: 'Remotes', icon: 'remote', hint: 'TV remote, Bluetooth, phone', View: RemotesPage },

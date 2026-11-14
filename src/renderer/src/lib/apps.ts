@@ -3,7 +3,8 @@ import type { AppEntry } from '@shared/apps'
 import { confirm, menu, type MenuItem } from '../state/nav'
 import { getSettings, updateSettings } from '../state/settings'
 import { toast } from '../state/toasts'
-import { run } from './api'
+import { appChoice, openVpnBlocked, setAppVpn, vpnOffered } from '../state/vpn'
+import { call, errorText, run } from './api'
 
 const POINTER_HINTS = 3
 
@@ -17,7 +18,21 @@ export async function launchApp(app: AppEntry): Promise<void> {
     toast(`${app.name} needs pointer mode: use your remote's pointer or a mouse. Hold Back to come Home.`, 'info')
     void updateSettings((c) => ({ apps: { pointerHintsShown: c.apps.pointerHintsShown + 1 } }))
   }
-  await run('apps.launch', app.id)
+  try {
+    const r = await call('apps.launch', app.id)
+    if (r.ok) return
+    if (r.vpnBlocked) openVpnBlocked(app, () => void launchApp(app))
+    else toast(r.error, 'error')
+  } catch (err) {
+    toast(errorText(err), 'error')
+  }
+}
+
+/** The app menu's VPN switch (vpn.md 7.5): on means "use the VPN, don't open without it". */
+function toggleVpn(app: AppEntry, on: boolean): void {
+  void setAppVpn(app, on ? 'vpn-only' : 'direct').then((ok) => {
+    if (ok) toast(on ? `${app.name} now uses the VPN` : `${app.name} now connects directly`, 'ok')
+  })
 }
 
 // Each change is worked out from the settings as they are when it is sent, so two quick edits both survive.
@@ -81,6 +96,14 @@ export function appMenuItems(app: AppEntry): MenuItem[] {
     if (i < pinned.length - 1) items.push({ id: 'right', label: 'Move right on Home', icon: 'next', onSelect: () => movePinned(app, 1) })
   } else if (!app.blocked && !hidden) {
     items.push({ id: 'pin', label: 'Add to Home', icon: 'pin', onSelect: () => setPinned(app, true) })
+  }
+  if (vpnOffered(app)) {
+    const on = appChoice(app) !== 'direct'
+    items.push(
+      on
+        ? { id: 'vpn-off', label: 'Stop using the VPN', icon: 'shield', onSelect: () => toggleVpn(app, false) }
+        : { id: 'vpn-on', label: 'Use the VPN', icon: 'shield', onSelect: () => toggleVpn(app, true) },
+    )
   }
   items.push(
     hidden

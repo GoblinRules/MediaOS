@@ -99,6 +99,16 @@ export function openRecoveryMenu(): void {
         icon: 'warning',
         onSelect: confirmNetworkReset,
       },
+      {
+        id: 'rec-vpn-off',
+        label: 'Turn off the VPN for all apps',
+        detail: "If an app won't open because of the VPN",
+        icon: 'shield',
+        onSelect: () =>
+          void run('vpn.setAllApps', 'direct').then((ok) => {
+            if (ok) toast('All apps now connect directly.', 'ok')
+          }),
+      },
       { id: 'rec-diag', label: 'Save a problem report', icon: 'download', onSelect: () => void saveDiagnostics() },
       { id: 'rec-reset', label: 'Erase everything', icon: 'trash', danger: true, onSelect: factoryReset },
     ],

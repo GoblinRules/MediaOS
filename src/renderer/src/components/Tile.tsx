@@ -7,6 +7,7 @@ import { appIconUrl } from '@shared/apps'
 import { Focusable, cx } from './Focusable'
 import { Icon } from './Icon'
 import { focusedItem, openItemMenu } from '../lib/items'
+import { usesVpn, useVpn } from '../state/vpn'
 
 export type TileShape = 'poster' | 'landscape'
 
@@ -113,6 +114,7 @@ export function AppIcon({ app }: { app: AppEntry }): ReactNode {
 
 export function AppTile(p: { focusKey: string; app: AppEntry; onSelect: () => void; onMenu?: () => void }): ReactNode {
   const { app } = p
+  const vpn = usesVpn(app, useVpn())
   return (
     <Focusable
       focusKey={p.focusKey}
@@ -128,6 +130,11 @@ export function AppTile(p: { focusKey: string; app: AppEntry; onSelect: () => vo
         {app.nav === 'pointer' && !app.blocked && (
           <span className="app-flag" title="Uses pointer mode">
             <Icon name="pointer" size="1rem" />
+          </span>
+        )}
+        {vpn && (
+          <span className="app-flag app-flag-vpn" role="img" aria-label="Uses the VPN" title="Uses the VPN" data-testid="app-vpn-badge">
+            <Icon name="shield" size="1rem" />
           </span>
         )}
       </div>

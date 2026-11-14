@@ -12,6 +12,8 @@ import { appRunning, foregroundStore, playerActive, playerStore } from './state/
 import { useSettings } from './state/settings'
 import { pushToast } from './state/toasts'
 import { revertTrial, trialShowing } from './state/netTrial'
+import { openVpnDropped, watchVpn } from './state/vpn'
+import { launchApp } from './lib/apps'
 import { TopBar } from './components/TopBar'
 import { Overlays } from './overlays/Overlays'
 import { NetTrial } from './overlays/NetTrial'
@@ -77,6 +79,13 @@ function useCoreEvents(): void {
       onEvent('homeChanged', () => invalidateData()),
       onEvent('system', () => invalidateData()),
       onEvent('recovery', () => openSystemMenu(openRecoveryMenu)),
+      onEvent('vpnDropped', ({ appId }) => {
+        void call('apps.list')
+          .then((list) => list.find((a) => a.id === appId))
+          .catch(() => undefined)
+          .then((app) => openVpnDropped(app, app ? () => void launchApp(app) : undefined))
+      }),
+      watchVpn(),
     ]
     call('shell.notices').then(
       (list) => list.forEach((t) => pushToast(t)),
