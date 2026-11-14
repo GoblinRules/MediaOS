@@ -11,6 +11,7 @@ import { toast } from '../../state/toasts'
 import { appChoice, useVpn, vpnStore } from '../../state/vpn'
 import { Button, FocusGroup } from '../../components/Focusable'
 import { Icon } from '../../components/Icon'
+import { Qr } from '../../components/Qr'
 import { Spinner } from '../../components/Row'
 import { RowsState, Section, SettingRow, ToggleRow } from './parts'
 
@@ -57,6 +58,8 @@ const CHECK_TEXT: Record<VpnStatus['check'], string | undefined> = {
 }
 
 export const IMPORT_ERRORS: Record<VpnImportError, string> = {
+  'no-network': "The TV isn't connected to your home network. Connect it in Settings > Network, then try again.",
+  'upload-unavailable': "The TV couldn't open the upload page. Restart the TV box and try again.",
   'not-wireguard': "This isn't a WireGuard file. Download a WireGuard file from your VPN provider and try again.",
   'several-peers': 'This file has more than one server in it. Download the file for one location and try again.',
   'not-full-tunnel':
@@ -517,10 +520,10 @@ function AddVpnFlow(p: { prefix: string; onDone: (chooseApps: boolean) => void; 
 function Waiting(p: { stage: Extract<VpnImportStage, { stage: 'waiting' }>; cancel: ReactNode }): ReactNode {
   const { url, code } = p.stage
   if (!url || !code) {
-    // The phone upload page comes with the phone remote server; until then only the developer file path works.
+    // Shown for a moment while the TV opens its upload page, or while the developer file path is read.
     return (
       <>
-        <p className="signin-text">Adding a VPN location from your phone isn&apos;t ready yet in this version of MediaOS.</p>
+        <p className="signin-wait">Getting the code ready...</p>
         <div className="signin-actions">{p.cancel}</div>
       </>
     )
@@ -528,11 +531,17 @@ function Waiting(p: { stage: Extract<VpnImportStage, { stage: 'waiting' }>; canc
   return (
     <>
       <p className="signin-text">
-        On your phone, open the address below, then choose the WireGuard file from your VPN provider. You can also paste the text of
-        the file.
+        On your phone, scan this code, then choose the WireGuard file from your VPN provider. You can also paste the text of the
+        file.
       </p>
-      <div className="signin-code is-address" data-testid="vpn-add-code">
-        {url}
+      <div className="vpn-upload-scan">
+        <Qr text={url} testId="vpn-add-qr" />
+        <div className="vpn-upload-address">
+          <p className="signin-note">Or type this address into your phone&apos;s web browser:</p>
+          <div className="signin-code is-address" data-testid="vpn-add-code">
+            {url}
+          </div>
+        </div>
       </div>
       <p className="signin-note">
         Your phone needs to be on the same Wi-Fi as this TV. This code works for 5 minutes.

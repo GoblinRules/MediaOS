@@ -41,6 +41,8 @@ export type VpnImportError =
   | 'expired'
   | 'too-many-locations'
   | 'save-failed'
+  | 'no-network'
+  | 'upload-unavailable'
 
 export interface VpnImportEntry {
   /** Opaque id made by main for this import only. */
@@ -51,7 +53,7 @@ export interface VpnImportEntry {
 
 /** One step of "Add a VPN location". Main owns the flow; the renderer only draws the current step. */
 export type VpnImportStage =
-  /** Waiting for a file. url and code are null on the dev path (MEDIAOS_VPN_IMPORT), which needs no phone. */
+  /** Waiting for a file. url and code are null without a phone upload host, including the dev file path. */
   | { stage: 'waiting'; url: string | null; code: string | null; expiresAt: string | null }
   | { stage: 'checking' }
   /** The upload held several servers; country is a short code such as "GB", or "" when unknown. */

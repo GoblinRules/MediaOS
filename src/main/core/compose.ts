@@ -6,7 +6,10 @@ import { NetQueue } from '../system/net/NetQueue'
 import { APP_CATALOG, findApp } from '../apps/app-catalog'
 import { basename, join, resolve, relative, isAbsolute } from 'node:path'
 import * as fs from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { networkInterfaces, tmpdir } from 'node:os'
+import { RemoteServer } from '../remote/RemoteServer'
+import { VpnUpload } from '../remote/upload'
+import { lanAddress, privateIpv4 } from '../remote/source-policy'
 import { Core } from './Core'
 import { SettingsStore } from '../settings/SettingsStore'
 import { SecretStore } from '../settings/SecretStore'
@@ -46,6 +49,7 @@ export interface ComposeOptions {
   platform: 'linux' | 'mock'
   appVersion?: string
   realSystem?: string[]
+  lan?: boolean
   dataDir: string
   logDir: string
   appIcons?: 'fetch' | 'off'
@@ -182,7 +186,20 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const backend = realVpn ? new NmWireGuard({ runner: new NodeCommandRunner(logger.child('vpn')),
     queue: net ? netQueue : new NetQueue(), runtimeDir: process.env.XDG_RUNTIME_DIR ?? null }) :
     new MockVpnBackend({ scenario: opts.vpnScenario, delayMs: opts.mockDelayMs, clock: opts.clock })
-  const vpn = new VpnController({ backend, settings, proxy, clock: opts.clock ?? runtime, logger: logger.child('vpn'),
+  const remote = new RemoteServer({ port: () => settings.get().remote.port, logger: logger.child('remote'),
+    now: opts.clock ? () => opts.clock!.now() : undefined,
+    bindHost: async () => {
+      if (opts.realSystem?.includes('network')) {
+        const ip = (await system.network.status()).ip
+        return ip && privateIpv4(ip) ? ip : null
+      }
+      return opts.lan ? lanAddress(networkInterfaces()) : '127.0.0.1'
+    } })
+  const upload: VpnUpload = new VpnUpload(remote, {
+    receiveFile: (name, data, code) => vpn.receiveFile(name, data, code),
+    uploadTooLarge: (code) => vpn.uploadTooLarge(code),
+  }, { clock: opts.clock, logger: logger.child('upload') })
+  const vpn: VpnController = new VpnController({ backend, settings, proxy, upload, clock: opts.clock ?? runtime, logger: logger.child('vpn'),
     networkBusy: async () => !!await system.network.trial(),
     closeApp: async () => { await apps.close(); core.setForeground({ kind: 'shell' }) }, runningApp: () => apps.running(),
     appIds: () => APP_CATALOG.map((a) => a.id), appName: (id) => findApp(id)?.name ?? 'The app',
@@ -252,6 +269,7 @@ export async function composeCore(opts: ComposeOptions): Promise<{
     if (disposed) return
     disposed = true
     vpn.dispose()
+    remote.dispose()
     try {
       await proxy.stop()
       await appIcons.dispose()

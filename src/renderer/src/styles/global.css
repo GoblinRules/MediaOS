@@ -1541,6 +1541,22 @@ p {
   letter-spacing: 0;
   overflow-wrap: anywhere;
 }
+/* VPN file upload: the QR code with the typed address beside it. */
+.vpn-upload-scan {
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
+}
+.vpn-upload-scan .qr {
+  flex: none;
+  border-radius: var(--radius-small);
+}
+.vpn-upload-address {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
 .signin-wait {
   color: var(--muted);
   display: flex;

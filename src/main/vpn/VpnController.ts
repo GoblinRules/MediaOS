@@ -12,6 +12,7 @@ import { readZipConfs } from './zip-reader'
 import { groupServers, suggestLabel } from './server-groups'
 import { stripDisplayControls } from './display-text'
 import { validTunnelAddress } from './proxy/target-policy'
+import type { VpnUploadPort } from '../remote/upload'
 
 export interface VpnProxyHost {
   start(): Promise<void>; stop(): Promise<void>; port(): number | null
@@ -28,6 +29,7 @@ export interface VpnControllerOptions {
   id?: () => string
   randomInt?: (max: number) => number
   networkBusy?: () => Promise<boolean>
+  upload?: VpnUploadPort
 }
 type Location = Settings['vpn']['locations'][number]
 const ok = { ok: true } as const
@@ -57,6 +59,7 @@ export class VpnController {
   private probeTimer?: ReturnType<typeof setInterval>
   private slowTimer?: ReturnType<typeof setTimeout>
   private importTimer?: ReturnType<typeof setTimeout>
+  private importRevision = 0
   private cancellations = new Set<() => void>()
   private readonly clock: Runtime
   private readonly logger: Log
@@ -445,6 +448,8 @@ export class VpnController {
     }, () => undefined)
   }
   private clearImport(): void {
+    ++this.importRevision
+    this.opts.upload?.close()
     if (this.importTimer !== undefined) this.clock.clearTimeout(this.importTimer)
     this.importTimer = undefined; this.config = null; this.entries = []
   }
@@ -474,6 +479,7 @@ export class VpnController {
   startImport(): Promise<VpnImportStage> {
     return this.queue(async () => {
       this.clearImport()
+      const revision = this.importRevision
       if (this.vpn().locations.length >= MAX_VPN_LOCATIONS) return this.importError('too-many-locations')
       this.stage = { stage: 'waiting', url: null, code: null, expiresAt: new Date(this.clock.now() + 300000).toISOString() }
       this.emit()
@@ -482,14 +488,40 @@ export class VpnController {
           const file = await this.opts.devImport()
           if (file) this.processFile(file.name, file.data); else this.importError('not-wireguard')
         } catch { this.importError('not-wireguard') }
-      } else this.importTimer = this.clock.setTimeout(() => {
-        if (this.stage?.stage === 'waiting') { this.importError('expired'); this.emit() }
-      }, 300000)
+      } else {
+        if (this.opts.upload) {
+          const upload = this.opts.upload
+          // A throw must not leave the TV on "Getting the code ready…" with no expiry timer.
+          const opened = await upload.open().catch(() => {
+            upload.close(); return { ok: false, error: 'upload-unavailable' } as const
+          })
+          if (this.disposed || revision !== this.importRevision) {
+            this.opts.upload.close(); return { stage: 'error', error: 'save-failed' }
+          }
+          if (!opened.ok) return this.importError(opened.error)
+          this.stage = { stage: 'waiting', url: opened.url, code: opened.code, expiresAt: opened.expiresAt }
+          this.emit()
+        }
+        const expiresAt = this.stage?.stage === 'waiting' ? this.stage.expiresAt : null
+        this.importTimer = this.clock.setTimeout(() => {
+          if (this.stage?.stage === 'waiting') { this.importError('expired'); this.emit() }
+        }, expiresAt ? Math.max(0, Date.parse(expiresAt) - this.clock.now()) : 300000)
+      }
       return structuredClone(this.stage!)
     }, () => ({ stage: 'error', error: 'save-failed' }))
   }
-  receiveFile(name: string, data: Buffer): Promise<void> {
-    return this.queue(async () => { if (this.stage?.stage === 'waiting') this.processFile(name, data) }, () => undefined)
+  /** True when the file reached the import that was waiting for it; false when that import had already ended. */
+  receiveFile(name: string, data: Buffer, code?: string): Promise<boolean> {
+    return this.queue(async () => {
+      if (this.stage?.stage !== 'waiting' || (code !== undefined && code !== this.stage.code)) return false
+      this.processFile(name, data)
+      return true
+    }, () => false)
+  }
+  uploadTooLarge(code: string): void {
+    if (!this.disposed && this.stage?.stage === 'waiting' && this.stage.code === code) {
+      this.importError('too-large'); this.emit()
+    }
   }
   chooseImportEntry(id: string): Promise<VpnImportStage> {
     return this.queue(async () => {

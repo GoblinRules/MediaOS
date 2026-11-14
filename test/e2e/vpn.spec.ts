@@ -1,11 +1,12 @@
 // End-to-end checks of Settings > VPN and the per-app VPN dialogs in mock mode (docs/design/vpn.md section 7).
 // The location comes from MEDIAOS_VPN_IMPORT (the developer file path); the WireGuard file uses random throwaway keys.
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { finishSetup, launch, openTab, press, type Box } from './launch'
+import { finishSetup, freshDataDir, launch, openTab, press, type Box } from './launch'
 
 let box: Box | undefined
 let dir: string | undefined
@@ -136,4 +137,50 @@ test('a file the mock cannot save shows the save error', async () => {
   await press(page, 'Escape')
   await expect(page.getByTestId('vpn-intro')).toBeVisible()
   await expect(page.getByTestId('vpn-add')).toHaveClass(/is-focused/)
+})
+
+test('add and save a location from the phone upload page', async () => {
+  test.setTimeout(90_000)
+  const listener = createServer()
+  await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve))
+  const address = listener.address()
+  if (!address || typeof address === 'string') throw new Error('No free upload port')
+  const port = address.port
+  await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()))
+  const dataDir = freshDataDir(), data = readFileSync(wireGuardFile(), 'utf8')
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ version: 1, remote: { port } }), { encoding: 'utf8' })
+  box = await launch({ dataDir, env: { MEDIAOS_VPN_IMPORT: '', MEDIAOS_LAN: '0', MEDIAOS_REAL_SYSTEM: '',
+    MEDIAOS_PLATFORM: 'mock', MEDIAOS_VPN_SCENARIO: 'vpn-default' } })
+  const page = box.page
+  await finishSetup(page)
+  await openTab(page, 'Settings')
+  await moveTo(page, 'settings-nav-vpn', 'ArrowDown')
+  await expect(page.getByTestId('settings-page-vpn')).toBeVisible()
+  await press(page, 'Enter')
+  await moveTo(page, 'vpn-add', 'ArrowDown')
+  await press(page, 'Enter')
+  const flow = page.getByTestId('vpn-add-flow')
+  await expect(flow).toHaveAttribute('data-step', 'waiting')
+  const code = page.getByTestId('vpn-add-code')
+  await expect(code).toContainText(`http://127.0.0.1:${port}/vpn-upload?code=`)
+  const text = await code.innerText(), url = /http:\/\/[^\s]+/.exec(text)?.[0]
+  if (!url) throw new Error('The TV did not show an upload address')
+  await expect(page.getByTestId('vpn-add-qr')).toBeVisible()
+  await shot(page, '09-phone-upload')
+  const pageReply = await fetch(url)
+  expect(pageReply.status).toBe(200)
+  expect(await pageReply.text()).toContain('id="send"')
+  const reply = await fetch(url + '&name=uk-london.conf', { method: 'POST', body: data,
+    headers: { 'X-MediaOS-Upload': '1', 'Content-Type': 'application/octet-stream' } })
+  expect(reply.status).toBe(200)
+  expect(await reply.json()).toEqual({ ok: true })
+  await expect(flow).toHaveAttribute('data-step', 'name')
+  await expect(page.getByTestId('vpn-add-removed')).toContainText('PostUp')
+  await moveTo(page, 'vpn-add-save', 'ArrowDown')
+  await press(page, 'Enter')
+  await expect(flow).toHaveAttribute('data-step', 'done')
+  await moveTo(page, 'vpn-add-done', 'ArrowRight')
+  await press(page, 'Enter')
+  await expect(page.getByTestId('vpn-intro')).toHaveCount(0)
+  await expect(page.getByTestId('settings-page-vpn')).toContainText('uk-london')
 })

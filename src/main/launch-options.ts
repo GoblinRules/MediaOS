@@ -5,6 +5,7 @@ import { VPN_SCENARIOS, type VpnScenario } from './vpn/mock/MockVpnBackend'
 export interface LaunchOptions {
   platform: 'linux' | 'mock'
   realSystem: string[]
+  lan: boolean
   /** Overrides Electron's userData folder (tests use a throwaway folder). */
   dataDir?: string
   /** A fixed window size instead of fullscreen, e.g. for 1280x720 screenshots. */
@@ -45,6 +46,7 @@ export function readLaunchOptions(env: Record<string, string | undefined>, argv:
     vpnScenario: VPN_SCENARIOS.find((s) => s === env.MEDIAOS_VPN_SCENARIO),
     platform: env.MEDIAOS_PLATFORM === 'linux' ? 'linux' : 'mock',
     realSystem: (env.MEDIAOS_REAL_SYSTEM ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    lan: env.MEDIAOS_LAN === '1' || flag('lan'),
     dataDir: env.MEDIAOS_DATA_DIR?.trim() || undefined,
     window: width >= 640 && height >= 360 ? { width, height } : undefined,
     forceMockPlayer: env.MEDIAOS_MOCK_PLAYER === '1' || flag('mock-player'),

@@ -15,6 +15,7 @@ export function redact(text: string): string {
       secretKey.test(key) ? `${separator}${key}=[REDACTED]` : match)
     .replace(headerSecret, '$1[REDACTED]')
     .replace(assignment, '$1[REDACTED]')
+    .replace(/\b(code=)\d+/gi, '$1[REDACTED]')
     .replace(/([=:]\s*)[A-Za-z0-9+/]{43}=(?![A-Za-z0-9+/=])/g, '$1[REDACTED]')
 }
 

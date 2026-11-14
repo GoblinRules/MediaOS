@@ -5,7 +5,7 @@ describe('readLaunchOptions', () => {
   it('defaults to mock, fullscreen, real player', () => {
     expect(readLaunchOptions({}, [])).toEqual({ platform: 'mock', dataDir: undefined, window: undefined, forceMockPlayer: false,
       mpvPath: undefined, devTools: false, background: false, appIcons: 'fetch', chromePath: undefined, controlSocket: undefined,
-      softwareVideo: false, netTrialSec: undefined, realSystem: [], vpnImport: undefined, vpnScenario: undefined })
+      softwareVideo: false, netTrialSec: undefined, realSystem: [], lan: false, vpnImport: undefined, vpnScenario: undefined })
   })
   it('parses the real-system comma list', () => {
     expect(readLaunchOptions({ MEDIAOS_REAL_SYSTEM: ' network, ,audio,  ' }, []).realSystem).toEqual(['network', 'audio'])

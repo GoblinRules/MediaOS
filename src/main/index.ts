@@ -55,6 +55,7 @@ async function start(): Promise<void> {
     appVersion: app.getVersion(),
     platform: opts.platform,
     realSystem: opts.realSystem,
+    lan: opts.lan,
     dataDir,
     logDir: join(dataDir, 'logs'),
     appIcons: opts.appIcons,
