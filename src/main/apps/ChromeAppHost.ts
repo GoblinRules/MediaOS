@@ -1,3 +1,4 @@
+import type { AppRoute } from '../../shared/vpn-types'
 import { spawn, type ChildProcess } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import { relative, isAbsolute, resolve } from 'node:path'
@@ -34,8 +35,8 @@ export class ChromeAppHost implements AppHost {
     this.queue = job
     return job
   }
-  launch(app: AppEntry): Promise<void> {
-    const args = chromeArgs(app, this.opts)
+  launch(app: AppEntry, route: AppRoute): Promise<void> {
+    const args = chromeArgs(app, this.opts, route)
     return this.serial(async () => {
       await this.closeCurrent()
       const profile = profilePath(this.opts.profileDir, app.id)

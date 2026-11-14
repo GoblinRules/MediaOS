@@ -18,15 +18,16 @@ describe('apps', () => {
   it('builds Chrome argv including optional UA, and rejects blocked apps', () => {
     const options = { profileDir: 'profiles', chromePath: 'chrome' }
     const youtube = APP_CATALOG.find((a) => a.id === 'youtube')!
-    const args = chromeArgs(youtube, options)
+    const args = chromeArgs(youtube, options, { kind: 'direct' })
     expect(args).toContain(`--app=${youtube.url}`); expect(args).toContain(`--user-agent=${youtube.ua}`)
     expect(args).toContain('--kiosk'); expect(args).toContain('--start-fullscreen')
     expect(args).toContain('--disable-features=Translate,MediaRouter')
     expect(args).toContain('--class=mediaos-app-youtube')
     expect(args.find((a) => a.startsWith('--user-data-dir='))).toContain('youtube')
-    expect(chromeArgs(APP_CATALOG.find((a) => a.id === 'netflix')!, options).some((a) => a.startsWith('--user-agent='))).toBe(false)
+    const netflixArgs = chromeArgs(APP_CATALOG.find((a) => a.id === 'netflix')!, options, { kind: 'direct' })
+    expect(netflixArgs.some((a) => a.startsWith('--user-agent='))).toBe(false)
     const blocked = APP_CATALOG.find((a) => a.blocked)!
-    expect(() => chromeArgs(blocked, options)).toThrow(blocked.note)
+    expect(() => chromeArgs(blocked, options, { kind: 'direct' })).toThrow(blocked.note)
   })
   it('repairs profile exit flags, preserves preferences and removes Singleton locks only', async () => {
     const temp = await temporary()
@@ -55,7 +56,7 @@ describe('apps', () => {
       windows.push(window); return window
     } })
     const exit = vi.fn(); host.onExit(exit)
-    await host.launch(APP_CATALOG[0]!); await host.launch(APP_CATALOG[1]!)
+    await host.launch(APP_CATALOG[0]!, { kind: 'direct' }); await host.launch(APP_CATALOG[1]!, { kind: 'direct' })
     expect(windows[0]?.close).toHaveBeenCalled(); expect(host.running()).toBe(APP_CATALOG[1]!.id)
     callbacks[0]!(); expect(exit).not.toHaveBeenCalled()
     callbacks[1]!(); expect(exit).toHaveBeenCalledWith(APP_CATALOG[1]!.id, 'exited'); expect(host.running()).toBeUndefined()
@@ -75,9 +76,9 @@ describe('apps', () => {
     const host = new ChromeAppHost({ profileDir: temp.dir, chromePath: 'chrome', spawn })
     const exit = vi.fn(); host.onExit(exit)
     try {
-      await host.launch(APP_CATALOG[0]!); expect(host.running()).toBe('youtube')
+      await host.launch(APP_CATALOG[0]!, { kind: 'direct' }); expect(host.running()).toBe('youtube')
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-      const launch = host.launch(APP_CATALOG[1]!)
+      const launch = host.launch(APP_CATALOG[1]!, { kind: 'direct' })
       await vi.advanceTimersByTimeAsync(3000); await launch
       expect(children[0]?.kill).toHaveBeenCalledWith('SIGTERM')
       expect(children[0]?.kill).toHaveBeenCalledWith('SIGKILL'); expect(exit).not.toHaveBeenCalled()

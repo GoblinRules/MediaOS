@@ -63,6 +63,9 @@ describe('core composition and IPC', () => {
       const removeFolder = await core.system.folders.add({ server: 'nas', share: 'Remove', guest: true })
       const retryFolder = await core.system.folders.add({ server: 'nas', share: 'Retry', guest: true })
       if (!removeFolder.ok || !retryFolder.ok) throw new Error('Mock folders were not created')
+      core.settings.update({ vpn: { locations: [{ id: 'loc-00000000', label: 'UK',
+        nmUuid: '00000000-0000-0000-0000-000000000001', dns: null, addedAt: '2026-11-14T00:00:00Z' }],
+        activeLocationId: 'loc-00000000' } })
       const args: Record<CallName, unknown[]> = {
         'folders.list': [], 'folders.discover': [], 'folders.listShares': [{ server: 'nas', guest: true }],
         'folders.add': [{ server: 'nas', share: 'Films', guest: true }],
@@ -95,8 +98,6 @@ describe('core composition and IPC', () => {
       }
       const seen = new Set<string>()
       for (const name of Object.keys(CALLS) as CallName[]) {
-        // The VPN calls are placeholders until tasks/032 adds the controller; that task removes this skip.
-        if (name.startsWith('vpn.')) { seen.add(name); continue }
         if (name === 'network.applyIp') await core.system.network.connect('Home Wi-Fi', 'correct')
         if (name === 'network.keep') await vi.advanceTimersByTimeAsync(2000)
         const reply = await handleCall(core, name, args[name])
@@ -330,7 +331,8 @@ describe('core composition and IPC', () => {
     })
     vi.spyOn(base.system.network, 'onToast').mockReturnValue(unToast)
     const core = new Core({ hub: base.hub, settings: base.settings, secrets: base.secrets, player: base.player,
-      apps: base.apps, system: base.system, signin: base.signin, logger: log, restartShell() {}, clearCaches: async () => undefined,
+      apps: base.apps, vpn: base.vpn, system: base.system, signin: base.signin, logger: log,
+      restartShell() {}, clearCaches: async () => undefined,
       notices: ['Extra notice.'] })
     const event = vi.fn(); core.on('netTrial', event)
     const first = deferred<Awaited<ReturnType<typeof base.system.network.trial>>>()

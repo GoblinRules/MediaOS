@@ -21,6 +21,7 @@ export interface AppEntry {
   /** Tile background and fallback colour; site icons are fetched and cached, never shipped. */
   colour: string
   accent?: string
+  vpn?: { lock?: 'direct'; mayNotWork?: boolean }
   ua?: string
 }
 

@@ -145,7 +145,7 @@ describe('Linux shell wiring', () => {
   })
   it('adds the Linux flags for Chrome and mpv', () => {
     const youtube = APP_CATALOG.find((a) => a.id === 'youtube')!
-    const args = chromeArgs(youtube, { profileDir: 'profiles', chromePath: 'chrome', extraArgs: LINUX_CHROME_ARGS })
+    const args = chromeArgs(youtube, { profileDir: 'profiles', chromePath: 'chrome', extraArgs: LINUX_CHROME_ARGS }, { kind: 'direct' })
     expect(args).toEqual(expect.arrayContaining(['--ozone-platform=wayland', '--password-store=basic', '--kiosk']))
     expect(linuxMpvArgs(false)).toEqual(['--input-vo-keyboard=yes', '--input-conf=/etc/mediaos/mpv/input.conf'])
     expect(linuxMpvArgs(true)).toContain('--hwdec=no')
@@ -253,7 +253,7 @@ describe('app windows left over from a crashed shell', () => {
     const table = fakeTable([browser(20, join(temp.dir, 'youtube')), browser(21, join(temp.dir, 'netflix'))])
     const host = new ChromeAppHost({ profileDir: temp.dir, chromePath: 'chrome', spawn, processes: table })
     try {
-      await host.launch(APP_CATALOG.find((a) => a.id === 'youtube')!)
+      await host.launch(APP_CATALOG.find((a) => a.id === 'youtube')!, { kind: 'direct' })
       // Chrome handed the window to another browser process for the same profile; closing the app closes that too.
       await host.close()
       expect(children).toHaveLength(1)

@@ -1,21 +1,22 @@
+import type { AppRoute } from '../../shared/vpn-types'
 import type { AppEntry } from '@shared/apps'
 import type { AppExitReason, AppHost } from './types'
 import { checkApp } from './chrome'
 import { silentLog, type Log } from '../log/Logger'
 
 export interface MockWindow { close(): void; onClosed(cb: () => void): void }
-export interface MockAppOptions { openWindow: (app: AppEntry) => MockWindow; logger?: Log }
+export interface MockAppOptions { openWindow: (app: AppEntry, route: AppRoute) => MockWindow; logger?: Log }
 
 export class MockAppHost implements AppHost {
   private current?: { appId: string; window: MockWindow }
   private listeners = new Set<(id: string, reason: AppExitReason) => void>()
   private queue: Promise<void> = Promise.resolve()
   constructor(private opts: MockAppOptions) {}
-  launch(app: AppEntry): Promise<void> {
+  launch(app: AppEntry, route: AppRoute): Promise<void> {
     checkApp(app)
     const job = this.queue.catch(() => undefined).then(() => {
       this.closeCurrent()
-      const window = this.opts.openWindow(app)
+      const window = this.opts.openWindow(app, route)
       const current = { appId: app.id, window }
       this.current = current
       window.onClosed(() => {

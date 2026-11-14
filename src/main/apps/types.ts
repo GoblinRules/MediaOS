@@ -1,10 +1,11 @@
+import type { AppRoute } from '../../shared/vpn-types'
 import type { AppEntry } from '@shared/apps'
 
 export type AppExitReason = 'exited' | 'handover'
 
 /** Runs a streaming app. Linux: Google Chrome --app in its own profile. Mock: a placeholder window. */
 export interface AppHost {
-  launch(app: AppEntry): Promise<void>
+  launch(app: AppEntry, route: AppRoute): Promise<void>
   /** Close the running app (if any). */
   close(): Promise<void>
   running(): string | undefined

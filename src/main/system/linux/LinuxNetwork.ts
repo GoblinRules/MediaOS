@@ -19,13 +19,14 @@ export interface LinuxNetworkOptions extends Omit<NmOptions, 'runner'> {
   journal?: string
   fs?: FileSystem
   trialSec?: number
+  queue?: NetQueue
 }
 export class LinuxNetwork implements Network {
   private readonly backend: NmBackend
   private readonly clock: Runtime
   private readonly logger: Log
   private readonly runner: CommandRunner
-  private readonly queue = new NetQueue()
+  private readonly queue: NetQueue
   private readonly ipTrial: IpTrial
   private listeners = new Set<() => void>()
   private monitor?: { kill(): void }
@@ -41,6 +42,7 @@ export class LinuxNetwork implements Network {
   private recheck?: { dev: string; address?: string }
 
   constructor(opts: LinuxNetworkOptions) {
+    this.queue = opts.queue ?? new NetQueue()
     this.clock = opts.clock ?? runtime
     this.monotonic = opts.monotonic ?? (() => performance.now())
     this.logger = opts.logger ?? silentLog

@@ -1,3 +1,4 @@
+import type { AppRoute } from '../../shared/vpn-types'
 import * as fs from 'node:fs/promises'
 import { join, resolve, relative, isAbsolute } from 'node:path'
 import type { AppEntry } from '@shared/apps'
@@ -15,12 +16,16 @@ export function profilePath(root: string, id: string): string {
   if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('Profile must be inside the profiles folder')
   return path
 }
-export function chromeArgs(app: AppEntry, opts: { profileDir: string; chromePath: string; extraArgs?: string[] }): string[] {
+export function chromeArgs(
+  app: AppEntry, opts: { profileDir: string; chromePath: string; extraArgs?: string[] }, route: AppRoute,
+): string[] {
   checkApp(app)
   return [`--app=${app.url}`, `--user-data-dir=${profilePath(opts.profileDir, app.id)}`, '--kiosk', '--start-fullscreen',
     '--no-first-run', '--no-default-browser-check', '--disable-session-crashed-bubble',
     '--disable-features=Translate,MediaRouter', '--autoplay-policy=no-user-gesture-required', `--class=mediaos-app-${app.id}`,
-    ...(opts.extraArgs ?? []), ...(app.ua ? [`--user-agent=${app.ua}`] : [])]
+    ...(opts.extraArgs ?? []), ...(app.ua ? [`--user-agent=${app.ua}`] : []),
+    ...(route.kind === 'vpn' ? [`--proxy-server=socks5://127.0.0.1:${route.port}`,
+      '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1', '--disable-quic'] : ['--no-proxy-server'])]
 }
 
 /** Chrome on the TV: a Wayland window under sway, no keyring prompt, no "restore pages?" bubble. */

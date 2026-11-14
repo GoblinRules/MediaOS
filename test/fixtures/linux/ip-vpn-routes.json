@@ -1,0 +1,3 @@
+[
+  {"dst":"default","dev":"mosvpn0","protocol":"static","scope":"link","metric":50,"flags":[]}
+]

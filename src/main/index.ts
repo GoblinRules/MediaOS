@@ -1,3 +1,4 @@
+import type { AppRoute } from '../shared/vpn-types'
 // Composition root: opens the TV window, locks it down, and connects it to the core services.
 // Everything here is thin Electron glue; the logic lives in core/ and is unit-tested without Electron.
 import { join } from 'node:path'
@@ -60,6 +61,8 @@ async function start(): Promise<void> {
     mpvPath: opts.mpvPath,
     forceMockPlayer: opts.forceMockPlayer,
     netTrialSec: opts.netTrialSec,
+    vpnImport: app.isPackaged ? undefined : opts.vpnImport,
+    vpnScenario: app.isPackaged ? undefined : opts.vpnScenario,
     openAppWindow: openMockApp,
     restartShell,
     chromePath: opts.chromePath,
@@ -188,7 +191,7 @@ function sendToShell(event: 'action' | 'recovery', payload: EventPayloads['actio
  * internet. Its keys use the shell's own mapping and long-press timing: Back closes it back to Apps, Home (or a
  * long Back) closes it and goes to the Home screen, and a long Home opens the Recovery menu, just like the TV.
  */
-function openMockApp(entry: AppEntry): MockWindow {
+function openMockApp(entry: AppEntry, route: AppRoute): MockWindow {
   const win = newWindow({
     title: entry.name,
     backgroundColor: entry.colour,
@@ -230,7 +233,7 @@ function openMockApp(entry: AppEntry): MockWindow {
   })
   win.on('blur', () => timing.cancel())
   win.once('closed', () => timing.cancel())
-  void win.loadURL(mockAppPage(entry.name, entry.colour))
+  void win.loadURL(mockAppPage(entry.name, entry.colour, route))
   return {
     close: () => {
       if (!win.isDestroyed()) win.close()

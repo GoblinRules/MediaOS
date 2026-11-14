@@ -103,7 +103,7 @@ describe('profiles, diagnostics and sign-in limits', () => {
       const dir = join(temp.dir, 'youtube')
       await fs.mkdir(join(dir, 'Default'), { recursive: true })
       await fs.writeFile(join(dir, 'Default', 'Preferences'), '{"private-fragment"', 'utf8')
-      await host.launch(APP_CATALOG.find((a) => a.id === 'youtube')!)
+      await host.launch(APP_CATALOG.find((a) => a.id === 'youtube')!, { kind: 'direct' })
       expect(spawn).toHaveBeenCalledOnce()
       expect(JSON.parse(await fs.readFile(join(dir, 'Default', 'Preferences'), 'utf8'))).toEqual({
         profile: { exited_cleanly: true, exit_type: 'Normal' },

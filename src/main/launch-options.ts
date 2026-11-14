@@ -1,3 +1,5 @@
+import type { AppRoute } from '../shared/vpn-types'
+import { VPN_SCENARIOS, type VpnScenario } from './vpn/mock/MockVpnBackend'
 // Reads how MediaOS was started (environment and command line). Plain function so tests can run it without Electron.
 
 export interface LaunchOptions {
@@ -26,6 +28,8 @@ export interface LaunchOptions {
   softwareVideo: boolean
   /** Tests only: shorten the network trial countdown (3..45 seconds). */
   netTrialSec?: number
+  vpnImport?: string
+  vpnScenario?: VpnScenario
 }
 
 const SIZE = /^(\d{3,4})x(\d{3,4})$/
@@ -37,6 +41,8 @@ export function readLaunchOptions(env: Record<string, string | undefined>, argv:
   const height = size ? Number(size[2]) : 0
   const seconds = /^\d+$/.test(env.MEDIAOS_NET_TRIAL_SEC ?? '') ? Number(env.MEDIAOS_NET_TRIAL_SEC) : NaN
   return {
+    vpnImport: env.MEDIAOS_VPN_IMPORT?.trim() || undefined,
+    vpnScenario: VPN_SCENARIOS.find((s) => s === env.MEDIAOS_VPN_SCENARIO),
     platform: env.MEDIAOS_PLATFORM === 'linux' ? 'linux' : 'mock',
     realSystem: (env.MEDIAOS_REAL_SYSTEM ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     dataDir: env.MEDIAOS_DATA_DIR?.trim() || undefined,
@@ -55,8 +61,10 @@ export function readLaunchOptions(env: Record<string, string | undefined>, argv:
 }
 
 /** The mock "streaming app" window shows a local page instead of the real site, so nothing is fetched from the internet. */
-export function mockAppPage(name: string, colour: string): string {
+export function mockAppPage(name: string, colour: string, route: AppRoute = { kind: 'direct' }): string {
   const safeName = name.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+  const network = (route.kind === 'vpn' ? `VPN (${route.label})` : 'direct')
+    .replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
   const safeColour = /^#[0-9a-fA-F]{3,8}$/.test(colour) ? colour : '#222'
   const html =
     '<!doctype html><meta charset="utf-8"><title>' + safeName + '</title>' +
@@ -64,6 +72,7 @@ export function mockAppPage(name: string, colour: string): string {
     `<body style="margin:0;height:100vh;display:grid;place-items:center;background:${safeColour};color:#fff;` +
     'font:600 4vw system-ui,sans-serif;text-align:center">' +
     `<div>${safeName}<div style="font-size:1.4vw;font-weight:400;opacity:.8;margin-top:2vw">` +
-    'Test app window. Press Escape, Backspace or F1 to go back to MediaOS.</div></div>'
+    'Test app window. Press Escape, Backspace or F1 to go back to MediaOS.</div>' +
+    `<div data-testid="app-network" style="font-size:1.4vw">Network: ${network}</div></div>`
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }

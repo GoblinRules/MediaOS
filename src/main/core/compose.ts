@@ -1,4 +1,10 @@
-import { join, resolve, relative, isAbsolute } from 'node:path'
+import { VpnController, type VpnProxyHost } from '../vpn/VpnController'
+import { MockVpnBackend, type VpnScenario } from '../vpn/mock/MockVpnBackend'
+import { NmWireGuard } from '../vpn/linux/NmWireGuard'
+import { ProxyHost } from '../vpn/ProxyHost'
+import { NetQueue } from '../system/net/NetQueue'
+import { APP_CATALOG, findApp } from '../apps/app-catalog'
+import { basename, join, resolve, relative, isAbsolute } from 'node:path'
 import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { Core } from './Core'
@@ -29,7 +35,7 @@ import { JellyfinSource } from '../sources/jellyfin/JellyfinSource'
 import { WeatherService } from '../weather/WeatherService'
 import { PlexSource } from '../sources/plex/PlexSource'
 import { randomUUID } from 'node:crypto'
-import type { Runtime } from './runtime'
+import { runtime, type Runtime } from './runtime'
 import type { Action } from '@shared/actions'
 import { FolderSource } from '../sources/folders/FolderSource'
 import { ProgressStore } from '../sources/folders/ProgressStore'
@@ -54,6 +60,8 @@ export interface ComposeOptions {
   mockDelayMs?: number
   /** Tests only: shorten the network trial countdown. */
   netTrialSec?: number
+  vpnImport?: string
+  vpnScenario?: VpnScenario
   /** Linux only: where Chrome lives (default /usr/bin/google-chrome-stable). */
   chromePath?: string
   /** Linux only: the control socket sway's Home key talks to. */
@@ -136,9 +144,10 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   const mock = createMockSystem({ logger: logger.child('system'), logDir: opts.logDir, clock: opts.clock,
     delayMs: opts.mockDelayMs, journalPath: join(opts.dataDir, 'net-trial.json'), trialSec: opts.netTrialSec,
     foldersDir: join(opts.dataDir, 'mock-folders') })
+  const netQueue = new NetQueue()
   const net = linux && opts.realSystem?.includes('network')
     ? createLinuxNetwork({ logger: logger.child('network'), journal: join(opts.dataDir, 'net-trial.json'),
-      clock: opts.clock, trialSec: opts.netTrialSec }) : undefined
+      clock: opts.clock, trialSec: opts.netTrialSec, queue: netQueue }) : undefined
   const linuxSystem = linux ? createLinuxSystem({ logger: logger.child('system'), logDir: opts.logDir,
     clock: opts.clock, timers: opts.clock, fetch: opts.fetch,
     appVersion: opts.appVersion ?? '0.1.0', deviceName: () => settings.get().deviceName }) : undefined
@@ -160,7 +169,41 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   catch (error) { logger.warn('Network recovery failed at start-up', error) }
   const weather = new WeatherService({ fetch: opts.fetch, logger: logger.child('weather'),
     now: opts.clock ? () => opts.clock!.now() : undefined })
-  const core = new Core({ hub, settings, secrets, player, apps, system, signin, logger, notices, weather,
+  const realVpn = linux && opts.realSystem?.includes('vpn')
+  let mockProxyPort: number | null = null
+  const mockPortListeners = new Set<(port: number | null) => void>()
+  const mockPort = (port: number | null): void => { mockProxyPort = port; for (const cb of mockPortListeners) cb(port) }
+  const proxy: VpnProxyHost = realVpn ? new ProxyHost({ scriptPath: join(__dirname, 'vpn-proxy.js'),
+    runtimeDir: process.env.XDG_RUNTIME_DIR ?? null, uid: process.getuid?.() ?? null, clock: opts.clock,
+    logger: logger.child('vpn-proxy') }) : {
+    async start() { mockPort(1080) }, async stop() { mockPort(null) }, port: () => mockProxyPort,
+    onPort(cb) { mockPortListeners.add(cb); return () => { mockPortListeners.delete(cb) } }, setTunnel() {},
+  }
+  const backend = realVpn ? new NmWireGuard({ runner: new NodeCommandRunner(logger.child('vpn')),
+    queue: net ? netQueue : new NetQueue(), runtimeDir: process.env.XDG_RUNTIME_DIR ?? null }) :
+    new MockVpnBackend({ scenario: opts.vpnScenario, delayMs: opts.mockDelayMs, clock: opts.clock })
+  const vpn = new VpnController({ backend, settings, proxy, clock: opts.clock ?? runtime, logger: logger.child('vpn'),
+    networkBusy: async () => !!await system.network.trial(),
+    closeApp: async () => { await apps.close(); core.setForeground({ kind: 'shell' }) }, runningApp: () => apps.running(),
+    appIds: () => APP_CATALOG.map((a) => a.id), appName: (id) => findApp(id)?.name ?? 'The app',
+    isLockedDirect: (id) => findApp(id)?.vpn?.lock === 'direct',
+    emitStatus: (status) => core.emit('vpn', { status }), emitDropped: (appId) => core.emit('vpnDropped', { appId }),
+    toast: (text, tone) => core.emit('toast', { id: randomUUID(), text, tone }),
+    devImport: opts.vpnImport ? async () => {
+      const handle = await fs.open(opts.vpnImport!, 'r')
+      try {
+        const data = Buffer.alloc(65537)
+        let length = 0
+        while (length < data.length) {
+          const read = await handle.read(data, length, data.length - length, null)
+          if (!read.bytesRead) break
+          length += read.bytesRead
+        }
+        return { name: basename(opts.vpnImport!), data: data.subarray(0, length) }
+      } finally { await handle.close() }
+    } : undefined,
+  })
+  const core = new Core({ hub, settings, secrets, player, apps, vpn, system, signin, logger, notices, weather,
     timers: opts.clock, overnightUpdates: linux,
     bootOnce: linux ? async (key) => {
       try {
@@ -208,7 +251,9 @@ export async function composeCore(opts: ComposeOptions): Promise<{
   return { core, images, appIcons, dispose: async () => {
     if (disposed) return
     disposed = true
+    vpn.dispose()
     try {
+      await proxy.stop()
       await appIcons.dispose()
       control?.commands.dispose(); await control?.server.close(); await player.dispose(); await progress.flush()
       await apps.close(); await settings.flush()

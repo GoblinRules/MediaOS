@@ -1,0 +1,7 @@
+[
+  {"priority":0,"src":"all","table":"local"},
+  {"priority":5200,"src":"10.64.0.2","table":"51820"},
+  {"priority":5201,"src":"10.64.0.2","action":"unreachable"},
+  {"priority":32766,"src":"all","table":"main"},
+  {"priority":32767,"src":"all","table":"default"}
+]

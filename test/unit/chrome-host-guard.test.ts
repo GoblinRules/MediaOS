@@ -68,7 +68,7 @@ describe('Chrome profile guard', () => {
       f.live.set(101, app.id); f.live.set(102, other.id)
       const lock = join(f.dir, app.id, 'SingletonLock')
       await fs.mkdir(join(f.dir, app.id)); await fs.writeFile(lock, 'old browser', 'utf8')
-      const launch = f.host.launch(app)
+      const launch = f.host.launch(app, { kind: 'direct' })
       await until(() => f.events.includes('101:SIGTERM'))
       expect(await fs.readFile(lock, 'utf8')).toBe('old browser')
       expect(f.spawn).not.toHaveBeenCalled()
@@ -82,7 +82,7 @@ describe('Chrome profile guard', () => {
   it('launches normally without a process table', async () => {
     const f = await fixture(false)
     try {
-      await f.host.launch(app)
+      await f.host.launch(app, { kind: 'direct' })
       expect(f.host.running()).toBe(app.id)
       expect(f.spawn).toHaveBeenCalledOnce()
       expect(f.processes.list).not.toHaveBeenCalled()
@@ -92,7 +92,7 @@ describe('Chrome profile guard', () => {
   it('stops a hand-over browser and logs an error before notifying listeners at 1,500 ms', async () => {
     const f = await fixture()
     try {
-      await f.host.launch(app); f.live.set(201, app.id); f.live.set(202, other.id)
+      await f.host.launch(app, { kind: 'direct' }); f.live.set(201, app.id); f.live.set(202, other.id)
       f.advance(1500); f.children[0]!.emit('exit', 0, null)
       expect(f.exit).not.toHaveBeenCalled()
       await until(() => f.events.includes('201:SIGTERM'))
@@ -112,7 +112,7 @@ describe('Chrome profile guard', () => {
   ] as const)('reports a normal exit for $code / $signal at $ms ms', async ({ ms, code, signal }) => {
     const f = await fixture()
     try {
-      await f.host.launch(app); f.live.set(301, app.id)
+      await f.host.launch(app, { kind: 'direct' }); f.live.set(301, app.id)
       const checks = vi.mocked(f.processes.list).mock.calls.length
       f.advance(ms); f.children[0]!.emit('exit', code, signal)
       expect(f.exit).toHaveBeenCalledExactlyOnceWith(app.id, 'exited')
@@ -124,9 +124,9 @@ describe('Chrome profile guard', () => {
   it('does not treat its own quick close of a replaced app (Chrome exits 0 on SIGTERM) as a hand-over', async () => {
     const f = await fixture()
     try {
-      await f.host.launch(app)
+      await f.host.launch(app, { kind: 'direct' })
       // The fake kill() exits with code 0 at once, as real Chrome does on SIGTERM, well inside the 2 s window.
-      await f.host.launch(other)
+      await f.host.launch(other, { kind: 'direct' })
       expect(f.children[0]!.kill).toHaveBeenCalledWith('SIGTERM')
       const checks = vi.mocked(f.processes.list).mock.calls.length
       await f.host.closeLeftovers()
@@ -140,11 +140,11 @@ describe('Chrome profile guard', () => {
     const f = await fixture()
     const checked = deferred<void>(), release = deferred<void>()
     try {
-      await f.host.launch(app)
+      await f.host.launch(app, { kind: 'direct' })
       vi.mocked(f.processes.list).mockImplementationOnce(async () => { checked.resolve(); await release.promise; return [] })
       const leftovers = f.host.closeLeftovers()
       await checked.promise
-      const launch = f.host.launch(other)
+      const launch = f.host.launch(other, { kind: 'direct' })
       f.children[0]!.emit('exit', 0, null)
       release.resolve(); await leftovers; await launch; await f.host.closeLeftovers()
       expect(f.exit).not.toHaveBeenCalled(); expect(f.error).not.toHaveBeenCalled()
@@ -160,7 +160,7 @@ describe('Chrome profile guard', () => {
         queueMicrotask(() => { f.advance(5000); child.emit('spawn') })
         return child
       })
-      await f.host.launch(app); f.advance(1500); f.children[0]!.emit('exit', 0, null)
+      await f.host.launch(app, { kind: 'direct' }); f.advance(1500); f.children[0]!.emit('exit', 0, null)
       await until(() => f.exit.mock.calls.length > 0)
       expect(f.exit).toHaveBeenCalledExactlyOnceWith(app.id, 'handover')
     } finally { await f.dispose() }
@@ -175,7 +175,7 @@ describe('Chrome profile guard', () => {
         queueMicrotask(() => child.emit('error', error))
         return child
       })
-      await expect(f.host.launch(app)).rejects.toBe(error)
+      await expect(f.host.launch(app, { kind: 'direct' })).rejects.toBe(error)
       expect(f.exit).toHaveBeenCalledExactlyOnceWith(app.id, 'exited')
       expect(f.error).not.toHaveBeenCalled()
     } finally { await f.dispose() }

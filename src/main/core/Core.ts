@@ -1,3 +1,4 @@
+import type { VpnController } from '../vpn/VpnController'
 import type { CallArgs, CallName, CallResults, EventName, EventPayloads, Foreground } from '@shared/ipc-contract'
 import type { PlayerState } from '@shared/player-types'
 import type { Result } from '@shared/system-types'
@@ -19,7 +20,7 @@ import { UpdateScheduler } from './UpdateScheduler'
 
 export interface CoreOptions {
   hub: MediaHub; settings: SettingsStore; secrets: SecretStore; player: PlayerController
-  apps: AppHost; system: SystemServices; signin: SignInService; logger: Log
+  apps: AppHost; vpn: VpnController; system: SystemServices; signin: SignInService; logger: Log
   restartShell: () => void; clearCaches: () => Promise<void>
   clearProfiles?: () => Promise<void>; clearLogs?: () => Promise<void>
   notices?: string[]
@@ -32,13 +33,13 @@ export interface CoreOptions {
 }
 type Handlers = { [N in CallName]: (...args: CallArgs<N>) => Promise<CallResults[N]> }
 const ok: Result = { ok: true }
-const vpnMissing = (): never => { throw new SourceError("The VPN isn't available on this box yet.", 'unsupported') }
 
 export class Core {
   readonly hub: MediaHub
   readonly settings: SettingsStore
   readonly secrets: SecretStore
   readonly player: PlayerController
+  readonly vpn: VpnController
   readonly apps: AppHost
   readonly system: SystemServices
   readonly signin: SignInService
@@ -59,17 +60,21 @@ export class Core {
 
   constructor(private opts: CoreOptions) {
     this.hub = opts.hub; this.settings = opts.settings; this.secrets = opts.secrets; this.player = opts.player
+    this.vpn = opts.vpn
     this.apps = opts.apps; this.system = opts.system; this.signin = opts.signin; this.logger = opts.logger
     this.recovered = [this.settings.recoveredFrom, this.secrets.recoveredFrom].filter((s): s is string => !!s)
     this.recovered.push(...(opts.notices ?? []))
     this.unsubs.push(this.hub.onChanged(() => this.emit('homeChanged', {})),
       this.player.onState((state) => this.playerChanged(state)),
       this.apps.onExit((appId, reason) => {
+        this.vpn.noteExited(appId)
         this.setForeground({ kind: 'shell' })
         if (reason === 'handover') this.emit('toast', { id: randomUUID(), tone: 'error',
           text: `${findApp(appId)?.name ?? 'The app'} didn't open properly. Try again.` })
       }),
-      this.system.network.on('changed', () => this.emit('system', { what: 'network' })),
+      this.system.network.on('changed', () => {
+        this.emit('system', { what: 'network' }); this.vpn.notifyNetworkChanged()
+      }),
       this.system.network.on('trial', () => {
         const sequence = ++this.trialSequence
         void this.system.network.trial().then((trial) => {
@@ -90,9 +95,14 @@ export class Core {
   async start(): Promise<void> {
     if (this.started) return
     this.started = true
-    try {
-      if (this.settings.get().cec.wakeTvOnStart && await (this.opts.bootOnce?.('tv-woken') ?? true)) await this.wakeTv()
-    } catch (error) { this.logger.warn('TV wake at start-up failed', error) }
+    await Promise.all([
+      this.vpn.start().catch(() => { this.logger.warn('VPN start-up failed') }),
+      (async () => {
+        try {
+          if (this.settings.get().cec.wakeTvOnStart && await (this.opts.bootOnce?.('tv-woken') ?? true)) await this.wakeTv()
+        } catch (error) { this.logger.warn('TV wake at start-up failed', error) }
+      })(),
+    ])
   }
   private async wakeTv(): Promise<void> {
     try {
@@ -138,6 +148,9 @@ export class Core {
   getForeground(): Foreground { return { ...this.foreground } }
   setForeground(value: Foreground): void {
     if (JSON.stringify(value) === JSON.stringify(this.foreground)) return
+    if (this.foreground.kind === 'app' && this.apps.running() !== this.foreground.appId) {
+      this.vpn.noteExited(this.foreground.appId)
+    }
     this.foreground = { ...value }; this.emit('foreground', value)
   }
   private playerChanged(state: PlayerState): void {
@@ -237,7 +250,9 @@ export class Core {
       'player.play': async (key, playOpts) => {
         const source = this.hub.sourceFor(key)
         const plan = await this.hub.playback(key, playOpts)
+        const appId = this.apps.running()
         await this.apps.close()
+        if (appId) this.vpn.noteExited(appId)
         this.setForeground({ kind: 'shell' })
         await this.player.play(plan, source)
         if (this.player.state().status !== 'error') this.setForeground({ kind: 'player' })
@@ -253,22 +268,44 @@ export class Core {
       'apps.launch': async (id) => {
         const app = findApp(id)
         if (!app) throw new SourceError('That app could not be found. Choose another app.', 'notFound')
-        await this.player.stop(); await this.apps.launch(app); this.setForeground({ kind: 'app', appId: id }); return ok
+        const decision = await this.vpn.routeFor(id)
+        if (decision.kind === 'blocked') return { ok: false, error: `${app.name} can't open right now`, vpnBlocked: true }
+        const route = decision.kind === 'fallback' ? { kind: 'direct' as const } : decision
+        await this.player.stop()
+        // The launch closes any running app; forget it now so a drop mid-launch can't close and report the wrong app.
+        const previous = this.apps.running()
+        if (previous) this.vpn.noteExited(previous)
+        await this.apps.launch(app, route)
+        let dropped = false
+        const off = this.on('vpnDropped', ({ appId }) => { if (appId === id) dropped = true })
+        let confirmed: boolean
+        try { confirmed = await this.vpn.confirmLaunch(id, route, decision.kind === 'fallback') } finally { off() }
+        if (!confirmed) {
+          this.setForeground({ kind: 'shell' })
+          return dropped ? { ok: true } : { ok: false, error: `${app.name} closed because its VPN setting changed. Open it again.` }
+        }
+        this.setForeground({ kind: 'app', appId: id })
+        if (decision.kind === 'fallback') this.emit('toast', { id: randomUUID(), tone: 'info',
+          text: `The VPN isn't working, so ${app.name} opened without it.` })
+        return { ok: true }
       },
-      'apps.close': async () => { await this.apps.close(); this.setForeground({ kind: 'shell' }); return ok },
+      'apps.close': async () => {
+        const id = this.apps.running(); await this.apps.close()
+        if (id) this.vpn.noteExited(id)
+        this.setForeground({ kind: 'shell' }); return ok
+      },
       'apps.resetProfile': async (id) => { await this.apps.resetProfile(id); return ok },
-      // VPN: placeholders until the VPN controller lands (tasks/032). Each refuses with plain text.
-      'vpn.status': async () => vpnMissing(),
-      'vpn.setEnabled': async () => vpnMissing(),
-      'vpn.setLocation': async () => vpnMissing(),
-      'vpn.removeLocation': async () => vpnMissing(),
-      'vpn.check': async () => vpnMissing(),
-      'vpn.setAppVpn': async () => vpnMissing(),
-      'vpn.setAllApps': async () => vpnMissing(),
-      'vpn.startImport': async () => vpnMissing(),
-      'vpn.chooseImportEntry': async () => vpnMissing(),
-      'vpn.finishImport': async () => vpnMissing(),
-      'vpn.cancelImport': async () => vpnMissing(),
+      'vpn.status': async () => this.vpn.status(),
+      'vpn.setEnabled': (on) => this.vpn.setEnabled(on),
+      'vpn.setLocation': (id) => this.vpn.setLocation(id),
+      'vpn.removeLocation': (id) => this.vpn.removeLocation(id),
+      'vpn.check': () => this.vpn.check(),
+      'vpn.setAppVpn': (id, choice) => this.vpn.setAppVpn(id, choice),
+      'vpn.setAllApps': (choice) => this.vpn.setAllApps(choice),
+      'vpn.startImport': () => this.vpn.startImport(),
+      'vpn.chooseImportEntry': (id) => this.vpn.chooseImportEntry(id),
+      'vpn.finishImport': (label) => this.vpn.finishImport(label),
+      'vpn.cancelImport': () => this.vpn.cancelImport(),
       'settings.get': async () => this.settings.get(),
       'settings.update': async (patch) => {
         const value = this.settings.update(patch)
@@ -353,6 +390,7 @@ export class Core {
         await step('sign-in flows', async () => { await this.signin.cancelAll() }, true)
         await step('sign-ins', () => this.secrets.erase(), true)
         await step('network', () => system.network.resetAll().then((r) => { if (!r.ok) throw new Error(r.error) }))
+        await step('vpn', () => this.vpn.deleteAllProfiles())
         await step('settings', () => this.settings.erase(), true)
         await step('player', () => this.player.stop())
         await step('apps', () => this.apps.close())
@@ -377,6 +415,7 @@ export class Core {
     }
   }
   dispose(): void {
+    this.vpn.dispose()
     this.updateScheduler?.dispose()
     ++this.trialSequence
     for (const [timer, resolve] of this.standbyTimers) { (this.opts.timers ?? runtime).clearTimeout(timer); resolve() }
