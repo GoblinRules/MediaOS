@@ -1,7 +1,7 @@
 {
   "name": "mediaos-shell",
   "productName": "MediaOS",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MediaOS: a TV-first home screen for a Linux media box",
   "private": true,
   "main": "out/main/index.js",
